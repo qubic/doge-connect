@@ -2,6 +2,8 @@
 
 ## Overall Design
 
+![Overall Design of Qubic Doge Mining](design.gif)
+
 ## Communication with the Qubic Network
 
 The Dispatcher communicates with the Qubic Network via custom qubic mining tasks and solutions.
