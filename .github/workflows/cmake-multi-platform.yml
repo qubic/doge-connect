@@ -5,11 +5,13 @@ on:
     branches: [ "main" ]
     paths:
         - 'dispatcher/**'
+        - '!dispatcher/doc/**'
         - '!dispatcher/README.md'
   pull_request:
     branches: [ "main" ]
     paths:
         - 'dispatcher/**'
+        - '!dispatcher/doc/**'
         - '!dispatcher/README.md'
 
 jobs:
