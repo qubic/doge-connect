@@ -11,6 +11,8 @@ The Qubic Doge Dispatcher project consists of the following targets to build:
 
 ## Application Architecture
 
+![Multi-threaded Dispatcher Architecture](doc/dispatcher_architecture.svg)
+
 `qubicdogedispatcher`
 
 First opens connections to the mining pool via stratum TCP and to the Qubic network (Qubic TCP handshake).
