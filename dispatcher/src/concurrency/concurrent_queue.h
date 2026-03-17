@@ -44,6 +44,16 @@ public:
         m_queue = {};
     }
 
+    std::optional<T> try_pop()
+    {
+        std::lock_guard<std::mutex> lock(m_mtx);
+        if (m_queue.empty())
+            return std::nullopt;
+        T value = std::move(m_queue.front());
+        m_queue.pop();
+        return value;
+    }
+
     std::size_t size()
     {
         std::lock_guard<std::mutex> lock(m_mtx);

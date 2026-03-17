@@ -174,7 +174,15 @@ void distributeTask(
         if (connection.sendMessage(buffer.data(), totalNumBytes))
             numSends++;
     }
-    std::cout << "Task " << qubicTask->jobId << " sent to the qubic network (" << numSends << "/" << connections.size() << " connections successful)." << std::endl;
+    std::cout << "Task " << qubicTask->jobId << " sent (" << numSends << "/" << connections.size() << " conns)"
+        << " | pool job: " << dispatcherTask.taskId
+        << " | prevHash: " << std::string(params[1]).substr(0, 16) << "..."
+        << " | nTime: " << std::string(params[7])
+        << " | nBits: " << std::string(params[6])
+        << " | merkle branches: " << dispatcherTask.merkleBranches.size()
+        << " | clean: " << (cleanJobQueue ? "yes" : "no")
+        << " | size: " << totalNumBytes << "B"
+        << std::endl;
 
     activeTasks.insert(qubicTask->jobId, std::move(dispatcherTask));
     stats.tasksDistributed++;
@@ -211,7 +219,49 @@ void taskDistributionLoop(
             }
             else if (msg["method"] == "mining.notify")
             {
-                distributeTask(std::move(msg), activeTasks, connections, currentPoolDifficulty,
+                // Drain any additional queued messages so we only distribute the latest job.
+                // This avoids sending a burst of stale jobs during startup or after reconnect.
+                nlohmann::json latestNotify = std::move(msg);
+                unsigned int skipped = 0;
+                while (auto next = queue.try_pop())
+                {
+                    nlohmann::json& nextMsg = *next;
+                    if (!nextMsg.contains("id"))
+                        continue;
+                    if (nextMsg["id"] == nullptr)
+                    {
+                        if (nextMsg["method"] == "mining.set_difficulty")
+                        {
+                            poolBaseDiffDivisor = nextMsg["params"][0];
+                            currentPoolDifficulty = DifficultyTarget(divideTarget(basePoolDifficulty.getFullRep(), poolBaseDiffDivisor));
+                        }
+                        else if (nextMsg["method"] == "mining.notify")
+                        {
+                            skipped++;
+                            latestNotify = std::move(nextMsg);
+                        }
+                    }
+                    else if (nextMsg["id"].is_number_unsigned())
+                    {
+                        // Process share responses inline so they aren't lost.
+                        unsigned int shareId = nextMsg["id"];
+                        if (nextMsg["result"] == false)
+                        {
+                            std::cout << "Share with submission id " << shareId << " was rejected by pool.";
+                            if (nextMsg["error"] != nullptr && nextMsg["error"].size() > 1)
+                                std::cout << " Reason: " << nextMsg["error"][1] << " (error code " << nextMsg["error"][0] << ").";
+                            std::cout << std::endl;
+                        }
+                        else
+                        {
+                            std::cout << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
+                        }
+                    }
+                }
+                if (skipped > 0)
+                    std::cout << "Skipped " << skipped << " queued job(s), distributing latest only." << std::endl;
+
+                distributeTask(std::move(latestNotify), activeTasks, connections, currentPoolDifficulty,
                     dispatcherDifficulty, extraNonce1, extraNonce2NumBytes, signingCtx, stats);
             }
         }
