@@ -153,9 +153,19 @@ template <typename T> int QubicConnection::receivePacketAndExtraDataWithHeaderAs
 }
 
 
+bool QubicConnection::reconnect()
+{
+    if (m_peerIp.empty() || m_peerPort == 0)
+        return false;
+    return openQubicConnection(m_peerIp, m_peerPort);
+}
+
 bool QubicConnection::openQubicConnection(const std::string& ip, int port)
 {
     closeConnection();
+
+    m_peerIp = ip;
+    m_peerPort = port;
 
     m_socket.rawSocket = socket(AF_INET, SOCK_STREAM, 0);
     sockaddr_in addr;

@@ -10,6 +10,8 @@
 class QubicConnection : public Connection
 {
 public:
+    QubicConnection() {}
+    QubicConnection(Socket&& socket) : Connection(std::move(socket)) {}
     /**
      * @brief Open a connection to a Qubic node using the Qubic handshake (ExchangePublicPeers).
      * @param ip The node IP address.
@@ -17,6 +19,15 @@ public:
      * @return True if connection was established, false otherwise.
      */
     bool openQubicConnection(const std::string& ip, int port);
+
+    /**
+     * @brief Attempt to reconnect using the stored IP and port from the last successful openQubicConnection call.
+     * @return True if reconnection was successful, false otherwise.
+     */
+    bool reconnect();
+
+    const std::string& getPeerIp() const { return m_peerIp; }
+    int getPeerPort() const { return m_peerPort; }
     
     /**
      * @brief Receive data of type T that is preceeded by a header. Skip data that does not match T.
@@ -40,5 +51,9 @@ public:
      * @return Returns the total number of bytes written to the buffer, or 0 if there is no connection, or -1 if an error occured.
      */
     template <typename T> int receivePacketAndExtraDataWithHeaderAs(char* buffer);
+
+private:
+    std::string m_peerIp;
+    int m_peerPort = 0;
 };
 

@@ -108,7 +108,6 @@ bool Connection::sendMessage(char* buffer, unsigned int size)
 {
     if (!m_socket.isConnected)
     {
-        std::cerr << "Socket is not connected, failed to send" << std::endl;
         return false;
     }
 
@@ -117,7 +116,10 @@ bool Connection::sendMessage(char* buffer, unsigned int size)
     {
         int sent = send(m_socket.rawSocket, buffer + totalSent, size - totalSent, 0);
         if (sent == -1)
+        {
+            m_socket.isConnected = false;
             return false;
+        }
         totalSent += sent;
     }
     return true;

@@ -20,12 +20,16 @@ typedef struct pollfd pollfd_t;
 #define GET_SOCKET_ERR errno
 #endif
 
+#include <chrono>
+
 #include "concurrency/concurrent_queue.h"
 #include "connection/qubic_connection.h"
 #include "k12_and_key_utils.h"
 #include "structs.h"
 
 constexpr unsigned long pollTimeoutMilliSec = 200;
+constexpr unsigned int reconnectBaseDelaySec = 2;
+constexpr unsigned int reconnectMaxDelaySec = 60;
 
 void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<DispatcherMiningSolution>& queue)
 {
@@ -73,51 +77,123 @@ void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<Dis
 }
 
 
+// Rebuild the pollfd list from current connections. Only includes connected sockets.
+static void buildPollList(std::vector<QubicConnection>& connections, std::vector<pollfd_t>& socketPollList, std::vector<size_t>& pollToConnIdx)
+{
+    socketPollList.clear();
+    pollToConnIdx.clear();
+    for (size_t i = 0; i < connections.size(); ++i)
+    {
+        if (connections[i].isConnected())
+        {
+            pollfd_t pd;
+            pd.fd = connections[i].getRawSocket();
+            pd.events = POLLIN;
+            pd.revents = 0;
+            socketPollList.push_back(pd);
+            pollToConnIdx.push_back(i);
+        }
+    }
+}
+
+// Try to reconnect a single connection with exponential backoff.
+// Returns true if reconnected, false if stop was requested before success.
+static bool tryReconnect(std::stop_token& st, QubicConnection& conn)
+{
+    unsigned int delaySec = reconnectBaseDelaySec;
+    while (!st.stop_requested())
+    {
+        std::cout << "qubicReceiveLoop: Reconnecting to " << conn.getPeerIp() << ":" << conn.getPeerPort()
+            << " in " << delaySec << "s..." << std::endl;
+
+        // Sleep in small increments so we can respond to stop requests.
+        for (unsigned int elapsed = 0; elapsed < delaySec && !st.stop_requested(); ++elapsed)
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        if (st.stop_requested())
+            return false;
+
+        if (conn.reconnect())
+        {
+            std::cout << "qubicReceiveLoop: Reconnected to " << conn.getPeerIp() << ":" << conn.getPeerPort() << "." << std::endl;
+            return true;
+        }
+
+        std::cerr << "qubicReceiveLoop: Reconnect failed for " << conn.getPeerIp() << ":" << conn.getPeerPort() << "." << std::endl;
+        delaySec = std::min(delaySec * 2, reconnectMaxDelaySec);
+    }
+    return false;
+}
+
 void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSolution>& queue, std::vector<QubicConnection>& connections)
 {
     std::array<char, 4096> buffer;
 
-    // Prepare the pollfd array.
     std::vector<pollfd_t> socketPollList;
-    for (const auto& c : connections)
-    {
-        pollfd_t pollDescriptor;
-        pollDescriptor.fd = c.getRawSocket();
-        pollDescriptor.events = POLLIN; // Monitor for incoming data
-        pollDescriptor.revents = 0;     // Output field reset
-        socketPollList.push_back(std::move(pollDescriptor));
-    }
+    std::vector<size_t> pollToConnIdx; // maps poll list index -> connections index
+    buildPollList(connections, socketPollList, pollToConnIdx);
 
     while (!st.stop_requested())
     {
-        // Returns number of sockets with events, or 0 if timeout.
+        if (socketPollList.empty())
+        {
+            // All connections are down. Try to reconnect each one.
+            for (auto& conn : connections)
+            {
+                if (!conn.isConnected())
+                    tryReconnect(st, conn);
+                if (st.stop_requested())
+                    return;
+            }
+            buildPollList(connections, socketPollList, pollToConnIdx);
+            continue;
+        }
+
         int numSockWithData = poll(socketPollList.data(), static_cast<unsigned long>(socketPollList.size()), pollTimeoutMilliSec);
 
         if (numSockWithData > 0)
         {
-            // Iterate to see which sockets are ready, i.e. they have data that can be read without blocking.
-            for (const auto& pollDescriptor : socketPollList)
+            bool needRebuild = false;
+
+            for (size_t p = 0; p < socketPollList.size(); ++p)
             {
-                if (pollDescriptor.revents & POLLIN)
+                const auto& pd = socketPollList[p];
+                size_t connIdx = pollToConnIdx[p];
+
+                if (pd.revents & POLLIN)
                 {
-                    int recvBytes = read(pollDescriptor.fd, buffer.data(), buffer.size());
+                    int recvBytes = read(pd.fd, buffer.data(), buffer.size());
 
                     if (recvBytes > 0)
                     {
                         processSolution(buffer.data(), static_cast<unsigned int>(recvBytes), queue);
                     }
-                    // TODO: handle disconnection of a single Qubic connection
+                    else
+                    {
+                        // recv returned 0 (graceful close) or -1 (error) — peer disconnected.
+                        std::cerr << "qubicReceiveLoop: Connection to " << connections[connIdx].getPeerIp() << " lost (recv returned " << recvBytes << ")." << std::endl;
+                        connections[connIdx].closeConnection();
+                        tryReconnect(st, connections[connIdx]);
+                        needRebuild = true;
+                    }
                 }
-                else if (pollDescriptor.revents & (POLLERR | POLLHUP))
+                else if (pd.revents & (POLLERR | POLLHUP))
                 {
-                    // TODO: handle error or hangup
+                    std::cerr << "qubicReceiveLoop: Connection to " << connections[connIdx].getPeerIp() << " lost (POLLERR|POLLHUP)." << std::endl;
+                    connections[connIdx].closeConnection();
+                    tryReconnect(st, connections[connIdx]);
+                    needRebuild = true;
                 }
             }
+
+            if (needRebuild)
+                buildPollList(connections, socketPollList, pollToConnIdx);
         }
         else if (numSockWithData < 0)
         {
-            std::cerr << "qubicReceiveLoop: Poll error occurred (" << GET_SOCKET_ERR << ")." << std::endl;
-            break;
+            std::cerr << "qubicReceiveLoop: Poll error (" << GET_SOCKET_ERR << "), rebuilding poll list." << std::endl;
+            // A poll error can happen if a socket fd became invalid. Rebuild and retry.
+            buildPollList(connections, socketPollList, pollToConnIdx);
         }
     }
 }
