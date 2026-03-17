@@ -150,6 +150,12 @@ void distributeTask(
         offset += branch.size();
     }
 
+    // Use millisecond timestamp as job ID (unique, meaningful, survives restarts).
+    // Must be set before signing so the signature covers the final payload.
+    qubicTask->jobId = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
+
     // Sign the task data (everything after the header, before the signature).
     const uint8_t* signDataStart = reinterpret_cast<const uint8_t*>(buffer.data()) + sizeof(RequestResponseHeader);
     unsigned int signDataSize = offset - sizeof(RequestResponseHeader);
@@ -161,11 +167,6 @@ void distributeTask(
         std::cerr << "distributeTask: Something went wrong in building QubicDogeMiningTask or its payload" << std::endl;
         return;
     }
-
-    // Use millisecond timestamp as job ID (unique, meaningful, survives restarts).
-    qubicTask->jobId = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count());
 
     // Send task to the Qubic network.
     unsigned int numSends = 0;
