@@ -36,5 +36,6 @@ void taskDistributionLoop(
     std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
     unsigned int extraNonce2NumBytes,
-    const DispatcherSigningContext& signingCtx
+    const DispatcherSigningContext& signingCtx,
+    DispatcherStats& stats
 );

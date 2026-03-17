@@ -22,36 +22,25 @@ void shareValidationLoop(
     ConcurrentHashMap<uint64_t, DispatcherMiningTask>& activeTasks,
     std::atomic<uint64_t>& nextStratumSendId,
     Connection& connection,
-    const std::string& workerName
+    const std::string& workerName,
+    DispatcherStats& stats
 )
 {
     std::array<uint8_t, 80> fullHeader;
     std::array<uint8_t, 32> scryptHash;
 
-    uint64_t numSubmitted = 0; // total number of submitted solutions
-    uint64_t numRejected = 0; // number of rejected solutions (stale task, wrong format, low difficulty)
-    uint64_t numAccepted = 0; // number of solutions accepted based on dispatcher difficulty
-    // numSubmitted = numRejected + numAccepted
-    uint64_t numPassedPoolDiff = 0; // number of solutions that also passed the pool difficulty
-
     while (!st.stop_requested())
     {
-        if (numSubmitted % 1 == 0)
-        {
-            std::cout << "shareValidation: Number of solutions submitted to Dispatcher " << numSubmitted << " (accepted: " << numAccepted
-                << " / rejected: " << numRejected << "). Solutions that passed pool difficulty: " << numPassedPoolDiff << std::endl;
-        }
-
         DispatcherMiningSolution sol = queue.pop(); // pop() blocks until data is available
 
-        numSubmitted++;
+        stats.solutionsReceived++;
 
         // Check that solution matches an active task.
         std::optional<DispatcherMiningTask> taskOptional = activeTasks.get(sol.jobId);
         if (!taskOptional.has_value())
         {
             std::cout << "shareValidationLoop: Ignoring stale submitted solution (dispatcher jobId " << sol.jobId << ")." << std::endl;
-            numRejected++;
+            stats.solutionsRejected++;
             continue;
         }
 
@@ -62,7 +51,7 @@ void shareValidationLoop(
         {
             std::cout << "shareValidationLoop: Ignoring submitted solution with wrong size of extraNonce2 ("
                 << sol.extraNonce2.size() << " vs. " << task.extraNonce2NumBytes << ")." << std::endl;
-            numRejected++;
+            stats.solutionsRejected++;
             continue;
         }
 
@@ -79,7 +68,7 @@ void shareValidationLoop(
         if (offset != 80)
         {
             std::cerr << "shareValidationLoop: Something is wrong with the header size (should be 80 bytes)." << std::endl;
-            numRejected++;
+            stats.solutionsRejected++;
             continue;
         }
 
@@ -88,16 +77,16 @@ void shareValidationLoop(
         if (!verifyHashVsTarget(scryptHash, task.targetDispatcher))
         {
             std::cout << "shareValidationLoop: Submitted solution FAILED Dispatcher target difficulty." << std::endl;
-            numRejected++;
+            stats.solutionsRejected++;
             continue;
         }
 
         std::cout << "shareValidationLoop: Submitted solution PASSED Dispatcher target difficulty." << std::endl;
-        numAccepted++;
+        stats.solutionsAccepted++;
 
         if (verifyHashVsTarget(scryptHash, task.targetPool))
         {
-            numPassedPoolDiff++;
+            stats.solutionsPassedPoolDiff++;
 
             if (connection.isConnected())
             {

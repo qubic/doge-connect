@@ -24,7 +24,8 @@ void distributeTask(
     std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
     unsigned int extraNonce2NumBytes,
-    const DispatcherSigningContext& signingCtx
+    const DispatcherSigningContext& signingCtx,
+    DispatcherStats& stats
 )
 {
     const nlohmann::json& params = task["params"];
@@ -175,6 +176,7 @@ void distributeTask(
     std::cout << "Task " << qubicTask->jobId << " sent to the qubic network (" << numSends << "/" << connections.size() << " connections successful)." << std::endl;
 
     activeTasks.insert(qubicTask->jobId, std::move(dispatcherTask));
+    stats.tasksDistributed++;
 }
 
 void taskDistributionLoop(
@@ -188,7 +190,8 @@ void taskDistributionLoop(
     std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
     unsigned int extraNonce2NumBytes,
-    const DispatcherSigningContext& signingCtx
+    const DispatcherSigningContext& signingCtx,
+    DispatcherStats& stats
 )
 {
     uint64_t poolBaseDiffDivisor = 1; // TODO: confirm that this is always an integer, not a floating point number.
@@ -209,7 +212,7 @@ void taskDistributionLoop(
             else if (msg["method"] == "mining.notify")
             {
                 distributeTask(std::move(msg), activeTasks, connections, currentPoolDifficulty,
-                    dispatcherDifficulty, dispatcherJobId, extraNonce1, extraNonce2NumBytes, signingCtx);
+                    dispatcherDifficulty, dispatcherJobId, extraNonce1, extraNonce2NumBytes, signingCtx, stats);
             }
         }
         else if (msg["id"].is_number_unsigned())

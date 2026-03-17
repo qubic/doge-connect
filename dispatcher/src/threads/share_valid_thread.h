@@ -23,5 +23,6 @@ void shareValidationLoop(
     ConcurrentHashMap<uint64_t, DispatcherMiningTask>& activeTasks,
     std::atomic<uint64_t>& nextStratumSendId,
     Connection& connection,
-    const std::string& workerName
+    const std::string& workerName,
+    DispatcherStats& stats
 );

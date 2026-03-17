@@ -9,6 +9,7 @@
 
 #include "config/config.h"
 #include "crypto/dispatcher_signing.h"
+#include "crypto/key_utils.h"
 #include "connection/connection.h"
 #include "connection/qubic_connection.h"
 #include "concurrency/concurrent_queue.h"
@@ -42,8 +43,14 @@ bool initStratumProtocol(
 )
 {
     // Send mining.subscribe
-    connection.sendMessage(R"({"id": 1, "method": "mining.subscribe", "params": []}\n)"); // Stratum messages must end in newline
-    auto response = nlohmann::json::parse(connection.receiveResponse());
+    connection.sendMessage("{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": []}\n"); // Stratum messages must end in newline
+    std::string subscribeResponse = connection.receiveResponse();
+    if (subscribeResponse.empty())
+    {
+        std::cerr << "No response received from pool for mining.subscribe." << std::endl;
+        return false;
+    }
+    auto response = nlohmann::json::parse(subscribeResponse);
     if (response["id"] == 1 && response["error"] == nullptr)
     {
         const nlohmann::json& result = response["result"];
@@ -68,9 +75,13 @@ bool initStratumProtocol(
     // - a mining.set_difficulty message
     // - the first mining task (mining.notify)
     std::string responseString = connection.receiveResponse();
-    auto splitView = responseString | std::views::split('\n');
-    for (const auto& line : splitView)
+    std::size_t pos = 0, end;
+    while ((end = responseString.find('\n', pos)) != std::string::npos || pos < responseString.size())
     {
+        if (end == std::string::npos)
+            end = responseString.size();
+        std::string line = responseString.substr(pos, end - pos);
+        pos = end + 1;
         if (line.empty())
             continue;
         response = nlohmann::json::parse(line);
@@ -132,7 +143,21 @@ int main(int argc, char* argv[])
         std::cerr << "Failed to derive signing keys from seed." << std::endl;
         return 1;
     }
-    std::cout << "Dispatcher signing context initialized." << std::endl;
+
+    // Derive and print the dispatcher's public identity from the public key.
+    char identity[61] = {0};
+    getIdentityFromPublicKey(signingCtx.publicKey.data(), identity, false);
+
+    // Print startup configuration summary.
+    std::string maskedSeed = config.identity.seed.substr(0, 3) + std::string(49, '*') + config.identity.seed.substr(52, 3);
+    std::cout << "=== Qubic Doge Dispatcher ===" << std::endl;
+    std::cout << "Config:     " << configPath << std::endl;
+    std::cout << "Pool:       " << config.pool.url << ":" << config.pool.stratumPort << std::endl;
+    std::cout << "Worker:     " << config.pool.workerName << std::endl;
+    std::cout << "Qubic IPs:  " << config.qubic.ips.size() << " (port " << config.qubic.port << ")" << std::endl;
+    std::cout << "Seed:       " << maskedSeed << std::endl;
+    std::cout << "Identity:   " << identity << std::endl;
+    std::cout << "=============================" << std::endl;
 
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
@@ -189,6 +214,8 @@ int main(int argc, char* argv[])
     // poolCurrentDifficulty is only read/written in the taskDistThread. If we ever add more threads accessing this, it needs to have a mutex.
     DifficultyTarget poolCurrentDifficulty = poolBaseDifficulty;
 
+    DispatcherStats stats;
+
     // Start all other threads. std::ref is needed here to force a pass by reference for the shared variables.
     // Start the input thread to react to key presses (currently supported: 'q' to quit).
     std::jthread inputThread(inputThreadLoop, std::ref(keepRunning));
@@ -196,20 +223,25 @@ int main(int argc, char* argv[])
     std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection));
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx));
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.
     std::jthread shareValidThread(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
-        std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName);
+        std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName, std::ref(stats));
+
+    std::cout << "Dispatcher running. Press 'q' to quit." << std::endl;
 
     while (keepRunning)
     {
-        std::cout << "Queues and Tasks Status: stratum task queue - " << recvStratumMessages.size() << " | solutions queue - " << recvQubicSolutions.size()
-            << " | active tasks - " << activeTasks.size() << std::endl;
-
         // TODO: replace the sleep below with condition_variable::wait_for(...) with the time and keepRunning.
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+        std::cout << "[status] tasks distributed: " << stats.tasksDistributed
+            << " | solutions recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
+            << " | pool shares: " << stats.solutionsPassedPoolDiff
+            << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()
+            << " | active tasks: " << activeTasks.size() << std::endl;
 
         // TODO: handle connection error (threads will shut down on recv/send error and need to be restarted after connection is re-established)
     }

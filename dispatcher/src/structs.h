@@ -1,10 +1,23 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <vector>
 #include <cstdint>
 
 constexpr uint8_t SIGNATURE_SIZE = 64;
+
+/**
+ * @brief Shared statistics counters for monitoring the dispatcher at runtime.
+ */
+struct DispatcherStats
+{
+    std::atomic<uint64_t> tasksDistributed{0};
+    std::atomic<uint64_t> solutionsReceived{0};
+    std::atomic<uint64_t> solutionsAccepted{0};
+    std::atomic<uint64_t> solutionsRejected{0};
+    std::atomic<uint64_t> solutionsPassedPoolDiff{0};
+};
 
 enum CustomMiningType : uint8_t
 {

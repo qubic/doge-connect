@@ -9,6 +9,7 @@
 
 #include "config/config.h"
 #include "crypto/dispatcher_signing.h"
+#include "crypto/key_utils.h"
 #include "connection/connection.h"
 #include "connection/qubic_connection.h"
 #include "concurrency/concurrent_queue.h"
@@ -65,7 +66,17 @@ int main(int argc, char* argv[])
         std::cerr << "Failed to derive signing keys from seed." << std::endl;
         return 1;
     }
-    std::cout << "Dispatcher signing context initialized." << std::endl;
+
+    char identity[61] = {0};
+    getIdentityFromPublicKey(signingCtx.publicKey.data(), identity, false);
+
+    std::string maskedSeed = config.identity.seed.substr(0, 3) + std::string(49, '*') + config.identity.seed.substr(52, 3);
+    std::cout << "=== Qubic Doge Test Dispatcher ===" << std::endl;
+    std::cout << "Config:     " << configPath << std::endl;
+    std::cout << "Qubic IPs:  " << config.qubic.ips.size() << " (port " << config.qubic.port << ")" << std::endl;
+    std::cout << "Seed:       " << maskedSeed << std::endl;
+    std::cout << "Identity:   " << identity << std::endl;
+    std::cout << "==================================" << std::endl;
 
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
@@ -111,6 +122,8 @@ int main(int argc, char* argv[])
     // Add mining.set_difficulty message to the queue.
     recvStratumMessages.push(nlohmann::json(R"({"id": null, "method": "mining.set_difficulty", "params": [65536]})"));
 
+    DispatcherStats stats;
+
     // Start all other threads. std::ref is needed here to force a pass by reference for the shared variables.
     // Start the input thread to react to key presses (currently supported: 'q' to quit).
     std::jthread inputThread(inputThreadLoop, std::ref(keepRunning));
@@ -118,24 +131,26 @@ int main(int argc, char* argv[])
     std::jthread stratumRecvThread(dummyStratumReceiveLoop, std::ref(recvStratumMessages), config.testDispatcher.timeBetweenJobsSec, config.testDispatcher.frequencyClearJobs);
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx));
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions. The test dispatcher does not submit to a pool, so fill data with dummies.
     std::atomic<uint64_t> nextStratumSendId = 3; // ids 1 and 2 were already used for protocol initialization
     Connection dummyStratumConnection;
     std::jthread shareValidThread(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
-        std::ref(nextStratumSendId), std::ref(dummyStratumConnection), /*workerName=*/"");
+        std::ref(nextStratumSendId), std::ref(dummyStratumConnection), /*workerName=*/"", std::ref(stats));
+
+    std::cout << "Test dispatcher running. Press 'q' to quit." << std::endl;
 
     while (keepRunning)
     {
-        std::cout << "Queues and Tasks Status: stratum task queue - " << recvStratumMessages.size() << " | solutions queue - " << recvQubicSolutions.size()
-            << " | active tasks - " << activeTasks.size() << std::endl;
-
-        // TODO: replace the sleep below with condition_variable::wait_for(...) with the time and keepRunning.
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
-        // TODO: handle connection error (threads will shut down on recv/send error and need to be restarted after connection is re-established)
+        std::cout << "[status] tasks distributed: " << stats.tasksDistributed
+            << " | solutions recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
+            << " | pool shares: " << stats.solutionsPassedPoolDiff
+            << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()
+            << " | active tasks: " << activeTasks.size() << std::endl;
     }
 
     // Close connection so that recv does not block the qubicRecvThread.
