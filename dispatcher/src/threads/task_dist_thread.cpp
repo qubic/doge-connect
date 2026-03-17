@@ -5,6 +5,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstring>
+#include <atomic>
 
 #include <nlohmann/json.hpp>
 
@@ -23,7 +24,7 @@ void distributeTask(
     const DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
-    unsigned int extraNonce2NumBytes,
+    std::atomic<unsigned int>& extraNonce2NumBytes,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats
 )
@@ -198,7 +199,7 @@ void taskDistributionLoop(
     DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
-    unsigned int extraNonce2NumBytes,
+    std::atomic<unsigned int>& extraNonce2NumBytes,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats
 )

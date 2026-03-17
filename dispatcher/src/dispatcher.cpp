@@ -25,85 +25,6 @@
 
 
 /**
- * @brief Initialize the stratum connection via mining.subscribe and mining.authorize messages.
- * @param connection The stratum TCP connection to the mining pool.
- * @param recvStratumMessages Queue of received stratum messages. The pool might send the first task immediately with the response
-                              to the initialization. The queue is used to forward it to the task distribution thread.
- * @param extraNonce1 Output parameter for the extraNonce1 received from the pool.
- * @param extraNonce2NumBytes Output parameter for the size of the extraNonce2 received from the pool.
- * @return True if the initialization was successful, false otherwise.
- */
-bool initStratumProtocol(
-    Connection& connection,
-    ConcurrentQueue<nlohmann::json>& recvStratumMessages,
-    std::vector<uint8_t>& extraNonce1,
-    unsigned int& extraNonce2NumBytes,
-    const std::string& workerName,
-    const std::string& workerPassword
-)
-{
-    // Send mining.subscribe
-    connection.sendMessage("{\"id\": 1, \"method\": \"mining.subscribe\", \"params\": []}\n"); // Stratum messages must end in newline
-    std::string subscribeResponse = connection.receiveResponse();
-    if (subscribeResponse.empty())
-    {
-        std::cerr << "No response received from pool for mining.subscribe." << std::endl;
-        return false;
-    }
-    auto response = nlohmann::json::parse(subscribeResponse);
-    if (response["id"] == 1 && response["error"] == nullptr)
-    {
-        const nlohmann::json& result = response["result"];
-        // TODO: save subscription IDs sent in index 0 to reconnect if the TCP connection is dropped.
-        std::string extraNonce1String = result[1];
-        extraNonce1 = hexToBytes(extraNonce1String, ByteArrayFormat::BigEndian);
-        extraNonce2NumBytes = result[2];
-        std::cout << "Received extraNonce1 " << extraNonce1String << ", size of extraNonce2 in bytes: " << extraNonce2NumBytes << std::endl;
-    }
-    else
-    {
-        std::cerr << "Mining subscribe response could not be parsed." << std::endl;
-        return false;
-    }
-
-    // Send mining.authorize
-    std::string auth = "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\""
-        + workerName + "\", \"" + workerPassword + "\"]}\n"; // Stratum messages must end in newline
-    connection.sendMessage(auth);
-    // The response typically consists of 3 JSON objects:
-    // - the actual response with id 2
-    // - a mining.set_difficulty message
-    // - the first mining task (mining.notify)
-    std::string responseString = connection.receiveResponse();
-    std::size_t pos = 0, end;
-    while ((end = responseString.find('\n', pos)) != std::string::npos || pos < responseString.size())
-    {
-        if (end == std::string::npos)
-            end = responseString.size();
-        std::string line = responseString.substr(pos, end - pos);
-        pos = end + 1;
-        if (line.empty())
-            continue;
-        response = nlohmann::json::parse(line);
-        if (response["id"] == 2)
-        {
-            // Check that authorization worked.
-            if (response["result"] == false || response["error"] != nullptr)
-            {
-                std::cerr << "Mining authorization did not work." << std::endl;
-                return false;
-            }
-        }
-        else if (response["id"] == nullptr)
-        {
-            recvStratumMessages.push(response);
-        }
-    }
-
-    return true;
-}
-
-/**
  * @brief The main Dispatcher application to act as a bridge between a doge mining pool and the Qubic network.
  * 
  * First opens connections to the mining pool via stratum TCP and to the Qubic network (Qubic TCP handshake).
@@ -198,7 +119,7 @@ int main(int argc, char* argv[])
     ConcurrentHashMap<uint64_t, DispatcherMiningTask> activeTasks;
 
     std::vector<uint8_t> extraNonce1;
-    unsigned int extraNonce2NumBytes;
+    std::atomic<unsigned int> extraNonce2NumBytes;
 
     if (!initStratumProtocol(stratumConnection, recvStratumMessages, extraNonce1, extraNonce2NumBytes,
             config.pool.workerName, config.pool.workerPassword))
@@ -219,10 +140,11 @@ int main(int argc, char* argv[])
     // Start the input thread to react to key presses (currently supported: 'q' to quit).
     std::jthread inputThread(inputThreadLoop, std::ref(keepRunning));
     // Start the stratumRecvThread to receive messages from the mining pool via stratum TCP.
-    std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection));
+    std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection),
+        std::ref(config.pool), std::ref(extraNonce1), std::ref(extraNonce2NumBytes));
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx), std::ref(stats));
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(extraNonce2NumBytes), std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.
