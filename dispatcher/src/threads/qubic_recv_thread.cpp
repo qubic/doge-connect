@@ -151,7 +151,7 @@ static bool tryReconnect(std::stop_token& st, QubicConnection& conn)
         }
 
         std::cerr << "qubicReceiveLoop: Reconnect failed for " << conn.getPeerIp() << ":" << conn.getPeerPort() << "." << std::endl;
-        delaySec = std::min(delaySec * 2, reconnectMaxDelaySec);
+        delaySec = (std::min)(delaySec * 2, reconnectMaxDelaySec);
     }
     return false;
 }

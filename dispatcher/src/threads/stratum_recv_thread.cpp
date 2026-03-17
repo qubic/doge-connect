@@ -129,7 +129,7 @@ void stratumReceiveLoop(
                 }
 
                 std::cerr << "stratumReceiveLoop: Reconnect failed." << std::endl;
-                delaySec = std::min(delaySec * 2, stratumReconnectMaxDelaySec);
+                delaySec = (std::min)(delaySec * 2, stratumReconnectMaxDelaySec);
             }
             continue;
         }
