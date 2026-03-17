@@ -196,11 +196,22 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
     // Receive handshake - exchange peer packets
     receivePacketWithHeaderAs<ExchangePublicPeers>();
 
+    // Send our own ExchangePublicPeers so the node marks us as having completed the handshake.
+    // Without this, the node's exchangedPublicPeers flag stays FALSE and it won't relay packets to us.
+    {
+        struct { RequestResponseHeader header; ExchangePublicPeers payload; } packet;
+        memset(&packet, 0, sizeof(packet));
+        packet.header.setSize(sizeof(packet));
+        packet.header.setType(ExchangePublicPeers::type());
+        packet.header.zeroDejavu();
+        sendMessage(reinterpret_cast<char*>(&packet), sizeof(packet));
+    }
+
     // If Qubic node has no ComputorList or a self-generated ComputorList it will requestComputor upon TCP initialization.
     // Ignore this message if it is sent. Temporarily set low timeout to not block if RequestComputors is not sent.
     setTimeout(SO_RCVTIMEO, /*milliseconds=*/200);
     receivePacketWithHeaderAs<RequestComputors>();
-    
+
     // Reset to no timeout.
     setTimeout(SO_RCVTIMEO, 0);
     setTimeout(SO_SNDTIMEO, 0);

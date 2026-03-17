@@ -31,14 +31,15 @@ constexpr unsigned long pollTimeoutMilliSec = 200;
 constexpr unsigned int reconnectBaseDelaySec = 2;
 constexpr unsigned int reconnectMaxDelaySec = 60;
 
-void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<DispatcherMiningSolution>& queue)
+// Process a single, already-framed packet (packetSize bytes starting at recvData).
+void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<DispatcherMiningSolution>& queue)
 {
     unsigned int requiredMinSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
-    if (recvBytes < requiredMinSize)
+    if (packetSize < requiredMinSize)
         return;
 
     RequestResponseHeader* header = reinterpret_cast<RequestResponseHeader*>(recvData);
-    if (header->size() < requiredMinSize || header->type() != CustomQubicMiningSolution::type())
+    if (header->type() != CustomQubicMiningSolution::type())
         return;
 
     // Read CustomQubicMiningSolution struct and check that type is DOGE.
@@ -50,11 +51,11 @@ void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<Dis
     // Parse QubicDogeMiningSolution struct and create DispatcherMiningSolution from it.
     offset += sizeof(CustomQubicMiningSolution);
     QubicDogeMiningSolution* dogeSol = reinterpret_cast<QubicDogeMiningSolution*>(recvData + offset);
-    if (requiredMinSize + dogeSol->extraNonce2NumBytes != recvBytes)
+    if (requiredMinSize + dogeSol->extraNonce2NumBytes != packetSize)
         return;
 
     // Verify signature: covers everything after the header, before the trailing 64-byte signature.
-    const unsigned int messageSize = recvBytes - sizeof(RequestResponseHeader);
+    const unsigned int messageSize = packetSize - sizeof(RequestResponseHeader);
     const uint8_t* payload = reinterpret_cast<const uint8_t*>(recvData + sizeof(RequestResponseHeader));
     unsigned char digest[32];
     KangarooTwelve(payload, messageSize - SIGNATURE_SIZE, digest, 32);
@@ -74,6 +75,36 @@ void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<Dis
     dispSol.extraNonce2 = std::vector<uint8_t>(recvData + offset, recvData + offset + dogeSol->extraNonce2NumBytes);
 
     queue.push(std::move(dispSol));
+}
+
+// Parse complete packets from a stream buffer using RequestResponseHeader framing.
+// Calls processSolution for each complete packet, then removes consumed bytes from the buffer.
+static void processRecvBuffer(std::vector<char>& buf, ConcurrentQueue<DispatcherMiningSolution>& queue)
+{
+    unsigned int pos = 0;
+    while (pos + sizeof(RequestResponseHeader) <= buf.size())
+    {
+        RequestResponseHeader* header = reinterpret_cast<RequestResponseHeader*>(buf.data() + pos);
+        unsigned int packetSize = header->size();
+
+        // Sanity: broken header (size 0 or impossibly large).
+        if (packetSize < sizeof(RequestResponseHeader) || packetSize > 10 * 1024 * 1024)
+        {
+            buf.clear();
+            return;
+        }
+
+        // Not enough data yet for the full packet — wait for more.
+        if (pos + packetSize > buf.size())
+            break;
+
+        processSolution(buf.data() + pos, packetSize, queue);
+        pos += packetSize;
+    }
+
+    // Remove consumed bytes.
+    if (pos > 0)
+        buf.erase(buf.begin(), buf.begin() + pos);
 }
 
 
@@ -127,7 +158,10 @@ static bool tryReconnect(std::stop_token& st, QubicConnection& conn)
 
 void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSolution>& queue, std::vector<QubicConnection>& connections)
 {
-    std::array<char, 4096> buffer;
+    std::array<char, 4096> readBuf;
+
+    // Per-connection stream buffer for reassembling packets from the TCP byte stream.
+    std::vector<std::vector<char>> recvBuffers(connections.size());
 
     std::vector<pollfd_t> socketPollList;
     std::vector<size_t> pollToConnIdx; // maps poll list index -> connections index
@@ -162,17 +196,18 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
 
                 if (pd.revents & POLLIN)
                 {
-                    int recvBytes = read(pd.fd, buffer.data(), buffer.size());
+                    int recvBytes = read(pd.fd, readBuf.data(), readBuf.size());
 
                     if (recvBytes > 0)
                     {
-                        processSolution(buffer.data(), static_cast<unsigned int>(recvBytes), queue);
+                        recvBuffers[connIdx].insert(recvBuffers[connIdx].end(), readBuf.data(), readBuf.data() + recvBytes);
+                        processRecvBuffer(recvBuffers[connIdx], queue);
                     }
                     else
                     {
-                        // recv returned 0 (graceful close) or -1 (error) — peer disconnected.
                         std::cerr << "qubicReceiveLoop: Connection to " << connections[connIdx].getPeerIp() << " lost (recv returned " << recvBytes << ")." << std::endl;
                         connections[connIdx].closeConnection();
+                        recvBuffers[connIdx].clear();
                         tryReconnect(st, connections[connIdx]);
                         needRebuild = true;
                     }
@@ -181,6 +216,7 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
                 {
                     std::cerr << "qubicReceiveLoop: Connection to " << connections[connIdx].getPeerIp() << " lost (POLLERR|POLLHUP)." << std::endl;
                     connections[connIdx].closeConnection();
+                    recvBuffers[connIdx].clear();
                     tryReconnect(st, connections[connIdx]);
                     needRebuild = true;
                 }
@@ -192,7 +228,6 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
         else if (numSockWithData < 0)
         {
             std::cerr << "qubicReceiveLoop: Poll error (" << GET_SOCKET_ERR << "), rebuilding poll list." << std::endl;
-            // A poll error can happen if a socket fd became invalid. Rebuild and retry.
             buildPollList(connections, socketPollList, pollToConnIdx);
         }
     }
