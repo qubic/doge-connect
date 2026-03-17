@@ -36,12 +36,21 @@ struct TestDispatcherConfig
 };
 
 /**
+ * @brief Configuration for the dispatcher's identity (seed for signing tasks).
+ */
+struct DispatcherIdentityConfig
+{
+    std::string seed; // 55-character lowercase seed (a-z)
+};
+
+/**
  * @brief Configuration for the main dispatcher application.
  */
 struct DispatcherAppConfig
 {
     PoolConfig pool;
     QubicConfig qubic;
+    DispatcherIdentityConfig identity;
 };
 
 /**
@@ -50,6 +59,7 @@ struct DispatcherAppConfig
 struct TestDispatcherAppConfig
 {
     QubicConfig qubic;
+    DispatcherIdentityConfig identity;
     TestDispatcherConfig testDispatcher;
 };
 

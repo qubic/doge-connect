@@ -7,8 +7,17 @@ add_library(hashutil
 	hash_util/difficulty.h
 	hash_util/difficulty.cpp
 )
-target_include_directories(hashutil 
+target_include_directories(hashutil
   INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/hash_util)
+
+# qubic crypto library (FourQ + KangarooTwelve, from qubic-cli)
+add_library(qubiccrypto
+	crypto/key_utils.cpp
+	crypto/dispatcher_signing.cpp
+)
+target_include_directories(qubiccrypto
+  PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/crypto)
+target_compile_options(qubiccrypto PRIVATE -mavx2 -mrdrnd)
 
 # dispatcher lib
 set(SOURCES
@@ -39,7 +48,7 @@ target_include_directories(dispatcherlib
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES})
 
-target_link_libraries(dispatcherlib PUBLIC nlohmann_json::nlohmann_json PRIVATE hashutil)
+target_link_libraries(dispatcherlib PUBLIC nlohmann_json::nlohmann_json PRIVATE hashutil qubiccrypto)
 
 # main executable
 add_executable(qubicdogedispatcher dispatcher.cpp)

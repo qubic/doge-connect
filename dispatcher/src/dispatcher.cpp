@@ -8,6 +8,7 @@
 #include <nlohmann/json.hpp>
 
 #include "config/config.h"
+#include "crypto/dispatcher_signing.h"
 #include "connection/connection.h"
 #include "connection/qubic_connection.h"
 #include "concurrency/concurrent_queue.h"
@@ -125,6 +126,14 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    DispatcherSigningContext signingCtx;
+    if (!initSigningContext(config.identity.seed, signingCtx))
+    {
+        std::cerr << "Failed to derive signing keys from seed." << std::endl;
+        return 1;
+    }
+    std::cout << "Dispatcher signing context initialized." << std::endl;
+
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
     {
@@ -187,7 +196,7 @@ int main(int argc, char* argv[])
     std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection));
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes);
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.

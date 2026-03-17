@@ -18,3 +18,9 @@ add_executable(testminer
 )
 
 target_link_libraries(testminer PRIVATE hashutil dispatcherlib)
+
+# test signing executable
+add_executable(testsigning
+	testsigning/test_signing.cpp
+)
+target_link_libraries(testsigning PRIVATE qubiccrypto)

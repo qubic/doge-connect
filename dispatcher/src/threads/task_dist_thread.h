@@ -8,6 +8,7 @@
 #include "concurrency/concurrent_queue.h"
 #include "concurrency/concurrent_hashmap.h"
 #include "connection/qubic_connection.h"
+#include "crypto/dispatcher_signing.h"
 #include "hash_util/difficulty.h"
 #include "structs.h"
 
@@ -34,5 +35,6 @@ void taskDistributionLoop(
     const DifficultyTarget& dispatcherDifficulty,
     std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
-    unsigned int extraNonce2NumBytes
+    unsigned int extraNonce2NumBytes,
+    const DispatcherSigningContext& signingCtx
 );

@@ -8,5 +8,8 @@
     "qubic": {
         "ips": ["127.0.0.1"],
         "port": 21841
+    },
+    "identity": {
+        "seed": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     }
 }

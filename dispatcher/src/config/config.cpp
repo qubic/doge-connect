@@ -24,6 +24,24 @@ std::optional<nlohmann::json> loadConfigFile(const std::string& filePath)
     }
 }
 
+static DispatcherIdentityConfig parseIdentityConfig(const nlohmann::json& j)
+{
+    DispatcherIdentityConfig config;
+    config.seed = j.at("identity").at("seed").get<std::string>();
+    if (config.seed.size() != 55)
+    {
+        throw std::runtime_error("Seed must be exactly 55 characters long.");
+    }
+    for (char c : config.seed)
+    {
+        if (c < 'a' || c > 'z')
+        {
+            throw std::runtime_error("Seed must contain only lowercase letters (a-z).");
+        }
+    }
+    return config;
+}
+
 static QubicConfig parseQubicConfig(const nlohmann::json& j)
 {
     QubicConfig config;
@@ -44,6 +62,7 @@ DispatcherAppConfig parseDispatcherConfig(const nlohmann::json& j)
     config.pool.workerPassword = pool.value("workerPassword", "123");
 
     config.qubic = parseQubicConfig(j);
+    config.identity = parseIdentityConfig(j);
     return config;
 }
 
@@ -51,6 +70,7 @@ TestDispatcherAppConfig parseTestDispatcherConfig(const nlohmann::json& j)
 {
     TestDispatcherAppConfig config;
     config.qubic = parseQubicConfig(j);
+    config.identity = parseIdentityConfig(j);
 
     if (j.contains("testDispatcher"))
     {

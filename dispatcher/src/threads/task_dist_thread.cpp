@@ -9,6 +9,7 @@
 
 #include "concurrency/concurrent_queue.h"
 #include "connection/qubic_connection.h"
+#include "crypto/dispatcher_signing.h"
 #include "hash_util/hash_util.h"
 #include "hash_util/difficulty.h"
 #include "structs.h"
@@ -22,7 +23,8 @@ void distributeTask(
     const DifficultyTarget& dispatcherDifficulty,
     std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
-    unsigned int extraNonce2NumBytes
+    unsigned int extraNonce2NumBytes,
+    const DispatcherSigningContext& signingCtx
 )
 {
     const nlohmann::json& params = task["params"];
@@ -147,8 +149,10 @@ void distributeTask(
         offset += branch.size();
     }
 
-    // TODO: calculate signature and write to buffer
-    memset(buffer.data() + offset, 0, SIGNATURE_SIZE);
+    // Sign the task data (everything after the header, before the signature).
+    const uint8_t* signDataStart = reinterpret_cast<const uint8_t*>(buffer.data()) + sizeof(RequestResponseHeader);
+    unsigned int signDataSize = offset - sizeof(RequestResponseHeader);
+    signTaskPacket(signingCtx, signDataStart, signDataSize, reinterpret_cast<uint8_t*>(buffer.data() + offset));
     offset += SIGNATURE_SIZE;
 
     if (offset != totalNumBytes)
@@ -183,7 +187,8 @@ void taskDistributionLoop(
     const DifficultyTarget& dispatcherDifficulty,
     std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
-    unsigned int extraNonce2NumBytes
+    unsigned int extraNonce2NumBytes,
+    const DispatcherSigningContext& signingCtx
 )
 {
     uint64_t poolBaseDiffDivisor = 1; // TODO: confirm that this is always an integer, not a floating point number.
@@ -203,8 +208,8 @@ void taskDistributionLoop(
             }
             else if (msg["method"] == "mining.notify")
             {
-                distributeTask(std::move(msg), activeTasks, connections, currentPoolDifficulty, 
-                    dispatcherDifficulty, dispatcherJobId, extraNonce1, extraNonce2NumBytes);
+                distributeTask(std::move(msg), activeTasks, connections, currentPoolDifficulty,
+                    dispatcherDifficulty, dispatcherJobId, extraNonce1, extraNonce2NumBytes, signingCtx);
             }
         }
         else if (msg["id"].is_number_unsigned())
