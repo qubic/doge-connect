@@ -18,6 +18,7 @@ typedef int SocketType;
 #define INVALID_SKT -1
 #endif
 
+#include "config/config.h"
 #include "concurrency/concurrent_queue.h"
 #include "connection/qubic_connection.h"
 #include "connection/connection.h"
@@ -27,8 +28,6 @@ typedef int SocketType;
 #include "task_recv_thread.h"
 #include "mining_thread.h"
 #include "mining_structs.h"
-
-constexpr int g_qubicPort = 21841;
 
 /**
  * @brief A test miner application to mine tasks from the Dispatcher.
@@ -41,8 +40,27 @@ constexpr int g_qubicPort = 21841;
  * 
  * @return 0 if the application completed without errors, 1 if the application terminated due to an error.
  */
-int main()
+int main(int argc, char* argv[])
 {
+    std::string configPath = "test_miner_config.json";
+    if (argc > 1)
+        configPath = argv[1];
+
+    auto configJson = loadConfigFile(configPath);
+    if (!configJson)
+        return 1;
+
+    TestMinerAppConfig config;
+    try
+    {
+        config = parseTestMinerConfig(*configJson);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Invalid config: " << e.what() << std::endl;
+        return 1;
+    }
+
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
     {
@@ -62,7 +80,7 @@ int main()
     sockaddr_in serverAddr{};
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = INADDR_ANY; // Listen on all interfaces
-    serverAddr.sin_port = htons(g_qubicPort);
+    serverAddr.sin_port = htons(config.qubic.port);
 
     if (bind(serverSocket, (struct sockaddr*)&serverAddr, sizeof(serverAddr)) < 0)
     {
@@ -78,7 +96,7 @@ int main()
         return 1;
     }
 
-    std::cout << "Test miner is listening on port " << g_qubicPort << "..." << std::endl;
+    std::cout << "Test miner is listening on port " << config.qubic.port << "..." << std::endl;
 
     sockaddr_in clientAddr{};
     socklen_t clientLen = sizeof(clientAddr);

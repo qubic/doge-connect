@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "config/config.h"
 #include "connection/connection.h"
 #include "connection/qubic_connection.h"
 #include "concurrency/concurrent_queue.h"
@@ -19,13 +20,6 @@
 #include "hash_util/hash_util.h"
 #include "hash_util/difficulty.h"
 #include "structs.h"
-
-
-const std::vector<std::string> g_qubicIPs = { "127.0.0.1" };
-constexpr int g_qubicPort = 21841;
-
-constexpr unsigned int g_dummyStratumRecvTimeBetweenJobsSec = 10;
-constexpr unsigned int g_dummyStratumRecvFrequencyClearJobs = 6;
 
 /**
  * @brief The test Dispatcher application that mimics a bridge between a doge mining pool and the Qubic network.
@@ -43,8 +37,27 @@ constexpr unsigned int g_dummyStratumRecvFrequencyClearJobs = 6;
  *
  * @return 0 if the application completed without errors, 1 if the application terminated due to an error.
  */
-int main()
+int main(int argc, char* argv[])
 {
+    std::string configPath = "test_dispatcher_config.json";
+    if (argc > 1)
+        configPath = argv[1];
+
+    auto configJson = loadConfigFile(configPath);
+    if (!configJson)
+        return 1;
+
+    TestDispatcherAppConfig config;
+    try
+    {
+        config = parseTestDispatcherConfig(*configJson);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Invalid config: " << e.what() << std::endl;
+        return 1;
+    }
+
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
     {
@@ -53,21 +66,21 @@ int main()
     }
 
     std::vector<QubicConnection> qubicConnections;
-    for (int i = 0; i < g_qubicIPs.size(); ++i)
+    for (int i = 0; i < config.qubic.ips.size(); ++i)
     {
         QubicConnection qc;
-        if (!qc.openQubicConnection(g_qubicIPs[i], g_qubicPort))
-            std::cerr << "Qubic connection could not be opened to IP " << g_qubicIPs[i] << std::endl;
+        if (!qc.openQubicConnection(config.qubic.ips[i], config.qubic.port))
+            std::cerr << "Qubic connection could not be opened to IP " << config.qubic.ips[i] << std::endl;
         else
             qubicConnections.push_back(std::move(qc));
     }
     if (qubicConnections.empty())
     {
-        std::cerr << "No Qubic connection was opened successfully (out of " << g_qubicIPs.size() << " provided IPs)." << std::endl;
+        std::cerr << "No Qubic connection was opened successfully (out of " << config.qubic.ips.size() << " provided IPs)." << std::endl;
         return 1;
     }
     else
-        std::cout << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << g_qubicIPs.size() << " IPs." << std::endl;
+        std::cout << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << config.qubic.ips.size() << " IPs." << std::endl;
 
     // Create a queue for received stratum messages.
     ConcurrentQueue<nlohmann::json> recvStratumMessages;
@@ -93,7 +106,7 @@ int main()
     // Start the input thread to react to key presses (currently supported: 'q' to quit).
     std::jthread inputThread(inputThreadLoop, std::ref(keepRunning));
     // Start the dummy stratumRecvThread to continuously push stratum messages onto the queue.
-    std::jthread stratumRecvThread(dummyStratumReceiveLoop, std::ref(recvStratumMessages), g_dummyStratumRecvTimeBetweenJobsSec, g_dummyStratumRecvFrequencyClearJobs);
+    std::jthread stratumRecvThread(dummyStratumReceiveLoop, std::ref(recvStratumMessages), config.testDispatcher.timeBetweenJobsSec, config.testDispatcher.frequencyClearJobs);
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
         std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes);

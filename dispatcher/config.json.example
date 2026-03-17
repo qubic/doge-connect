@@ -1,0 +1,12 @@
+{
+    "pool": {
+        "url": "stratum.example.com",
+        "stratumPort": "9332",
+        "workerName": "myworker.1",
+        "workerPassword": "123"
+    },
+    "qubic": {
+        "ips": ["127.0.0.1"],
+        "port": 21841
+    }
+}

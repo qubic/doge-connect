@@ -1,0 +1,84 @@
+#pragma once
+
+#include <string>
+#include <vector>
+#include <optional>
+
+#include <nlohmann/json.hpp>
+
+/**
+ * @brief Configuration for the stratum mining pool connection.
+ */
+struct PoolConfig
+{
+    std::string url;
+    std::string stratumPort;
+    std::string workerName;
+    std::string workerPassword;
+};
+
+/**
+ * @brief Configuration for Qubic network connections.
+ */
+struct QubicConfig
+{
+    std::vector<std::string> ips;
+    int port = 21841;
+};
+
+/**
+ * @brief Configuration for the test dispatcher's dummy stratum behavior.
+ */
+struct TestDispatcherConfig
+{
+    unsigned int timeBetweenJobsSec = 10;
+    unsigned int frequencyClearJobs = 6;
+};
+
+/**
+ * @brief Configuration for the main dispatcher application.
+ */
+struct DispatcherAppConfig
+{
+    PoolConfig pool;
+    QubicConfig qubic;
+};
+
+/**
+ * @brief Configuration for the test dispatcher application.
+ */
+struct TestDispatcherAppConfig
+{
+    QubicConfig qubic;
+    TestDispatcherConfig testDispatcher;
+};
+
+/**
+ * @brief Configuration for the test miner application.
+ */
+struct TestMinerAppConfig
+{
+    QubicConfig qubic;
+};
+
+/**
+ * @brief Load and parse a JSON config file.
+ * @param filePath Path to the JSON config file.
+ * @return The parsed JSON object, or std::nullopt if loading failed.
+ */
+std::optional<nlohmann::json> loadConfigFile(const std::string& filePath);
+
+/**
+ * @brief Parse a DispatcherAppConfig from a JSON object.
+ */
+DispatcherAppConfig parseDispatcherConfig(const nlohmann::json& j);
+
+/**
+ * @brief Parse a TestDispatcherAppConfig from a JSON object.
+ */
+TestDispatcherAppConfig parseTestDispatcherConfig(const nlohmann::json& j);
+
+/**
+ * @brief Parse a TestMinerAppConfig from a JSON object.
+ */
+TestMinerAppConfig parseTestMinerConfig(const nlohmann::json& j);

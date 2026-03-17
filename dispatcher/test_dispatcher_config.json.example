@@ -1,0 +1,10 @@
+{
+    "qubic": {
+        "ips": ["127.0.0.1"],
+        "port": 21841
+    },
+    "testDispatcher": {
+        "timeBetweenJobsSec": 10,
+        "frequencyClearJobs": 6
+    }
+}

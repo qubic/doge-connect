@@ -13,6 +13,8 @@ target_include_directories(hashutil
 # dispatcher lib
 set(SOURCES
 	structs.h
+	config/config.h
+	config/config.cpp
 	connection/connection.h
 	connection/connection.cpp
 	connection/qubic_connection.h
@@ -37,7 +39,7 @@ target_include_directories(dispatcherlib
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES})
 
-target_link_libraries(dispatcherlib PRIVATE nlohmann_json::nlohmann_json hashutil)
+target_link_libraries(dispatcherlib PUBLIC nlohmann_json::nlohmann_json PRIVATE hashutil)
 
 # main executable
 add_executable(qubicdogedispatcher dispatcher.cpp)

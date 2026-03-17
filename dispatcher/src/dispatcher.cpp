@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include "config/config.h"
 #include "connection/connection.h"
 #include "connection/qubic_connection.h"
 #include "concurrency/concurrent_queue.h"
@@ -19,15 +20,6 @@
 #include "hash_util/hash_util.h"
 #include "hash_util/difficulty.h"
 #include "structs.h"
-
-
-const std::string g_poolURL = "";
-const std::string g_poolStratumPort = "";
-const std::string g_workerName = "";
-const std::string g_workerPassword = "123";
-
-const std::vector<std::string> g_qubicIPs = { "127.0.0.1" };
-constexpr int g_qubicPort = 21841;
 
 
 /**
@@ -43,7 +35,9 @@ bool initStratumProtocol(
     Connection& connection,
     ConcurrentQueue<nlohmann::json>& recvStratumMessages,
     std::vector<uint8_t>& extraNonce1,
-    unsigned int& extraNonce2NumBytes
+    unsigned int& extraNonce2NumBytes,
+    const std::string& workerName,
+    const std::string& workerPassword
 )
 {
     // Send mining.subscribe
@@ -66,7 +60,7 @@ bool initStratumProtocol(
 
     // Send mining.authorize
     std::string auth = "{\"id\": 2, \"method\": \"mining.authorize\", \"params\": [\""
-        + g_workerName + "\", \"" + g_workerPassword + "\"]}\n"; // Stratum messages must end in newline
+        + workerName + "\", \"" + workerPassword + "\"]}\n"; // Stratum messages must end in newline
     connection.sendMessage(auth);
     // The response typically consists of 3 JSON objects:
     // - the actual response with id 2
@@ -110,8 +104,27 @@ bool initStratumProtocol(
  * 
  * @return 0 if the application completed without errors, 1 if the application terminated due to an error.
  */
-int main()
+int main(int argc, char* argv[])
 {
+    std::string configPath = "config.json";
+    if (argc > 1)
+        configPath = argv[1];
+
+    auto configJson = loadConfigFile(configPath);
+    if (!configJson)
+        return 1;
+
+    DispatcherAppConfig config;
+    try
+    {
+        config = parseDispatcherConfig(*configJson);
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Invalid config: " << e.what() << std::endl;
+        return 1;
+    }
+
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
     {
@@ -120,7 +133,7 @@ int main()
     }
 
     Connection stratumConnection;
-    if (!stratumConnection.openConnection(g_poolURL, g_poolStratumPort))
+    if (!stratumConnection.openConnection(config.pool.url, config.pool.stratumPort))
     {
         std::cerr << "Stratum connection could not be opened." << std::endl;
         return 1;
@@ -129,21 +142,21 @@ int main()
         std::cout << "Stratum connection successfully opened." << std::endl;
 
     std::vector<QubicConnection> qubicConnections;
-    for (int i = 0; i < g_qubicIPs.size(); ++i)
+    for (int i = 0; i < config.qubic.ips.size(); ++i)
     {
         QubicConnection qc;
-        if (!qc.openQubicConnection(g_qubicIPs[i], g_qubicPort))
-            std::cerr << "Qubic connection could not be opened to IP " << g_qubicIPs[i] << std::endl;
+        if (!qc.openQubicConnection(config.qubic.ips[i], config.qubic.port))
+            std::cerr << "Qubic connection could not be opened to IP " << config.qubic.ips[i] << std::endl;
         else
             qubicConnections.push_back(std::move(qc));
     }
     if (qubicConnections.empty())
     {
-        std::cerr << "No Qubic connection was opened successfully (out of " << g_qubicIPs.size() << " provided IPs)." << std::endl;
+        std::cerr << "No Qubic connection was opened successfully (out of " << config.qubic.ips.size() << " provided IPs)." << std::endl;
         return 1;
     }
     else
-        std::cout << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << g_qubicIPs.size() << " IPs." << std::endl;
+        std::cout << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << config.qubic.ips.size() << " IPs." << std::endl;
 
     // Create a queue for received stratum messages.
     ConcurrentQueue<nlohmann::json> recvStratumMessages;
@@ -153,7 +166,8 @@ int main()
     std::vector<uint8_t> extraNonce1;
     unsigned int extraNonce2NumBytes;
 
-    if (!initStratumProtocol(stratumConnection, recvStratumMessages, extraNonce1, extraNonce2NumBytes))
+    if (!initStratumProtocol(stratumConnection, recvStratumMessages, extraNonce1, extraNonce2NumBytes,
+            config.pool.workerName, config.pool.workerPassword))
         return 1;
 
     std::atomic<bool> keepRunning = true; // Atomic flag to signal the rest of the app to stop.
@@ -178,7 +192,7 @@ int main()
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.
     std::jthread shareValidThread(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
-        std::ref(nextStratumSendId), std::ref(stratumConnection), g_workerName);
+        std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName);
 
     while (keepRunning)
     {
