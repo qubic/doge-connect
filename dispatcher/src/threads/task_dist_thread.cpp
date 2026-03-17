@@ -2,6 +2,7 @@
 
 #include <stop_token>
 #include <iostream>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 
@@ -21,7 +22,6 @@ void distributeTask(
     std::vector<QubicConnection>& connections,
     const DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
-    std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
     unsigned int extraNonce2NumBytes,
     const DispatcherSigningContext& signingCtx,
@@ -162,9 +162,10 @@ void distributeTask(
         return;
     }
 
-    // Only increase dispatcherJobId once we know that task building worked.
-    dispatcherJobId++;
-    qubicTask->jobId = dispatcherJobId;
+    // Use millisecond timestamp as job ID (unique, meaningful, survives restarts).
+    qubicTask->jobId = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count());
 
     // Send task to the Qubic network.
     unsigned int numSends = 0;
@@ -187,7 +188,6 @@ void taskDistributionLoop(
     const DifficultyTarget& basePoolDifficulty,
     DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
-    std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
     unsigned int extraNonce2NumBytes,
     const DispatcherSigningContext& signingCtx,
@@ -212,7 +212,7 @@ void taskDistributionLoop(
             else if (msg["method"] == "mining.notify")
             {
                 distributeTask(std::move(msg), activeTasks, connections, currentPoolDifficulty,
-                    dispatcherDifficulty, dispatcherJobId, extraNonce1, extraNonce2NumBytes, signingCtx, stats);
+                    dispatcherDifficulty, extraNonce1, extraNonce2NumBytes, signingCtx, stats);
             }
         }
         else if (msg["id"].is_number_unsigned())

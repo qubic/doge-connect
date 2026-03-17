@@ -21,7 +21,6 @@
  * @param basePoolDifficulty The pool's constant base difficulty.
  * @param currentPoolDifficulty The current pool difficulty.
  * @param dispatcherDifficulty The current Dispatcher difficulty.
- * @param dispatcherJobId A monotonically increasing counter for the jobs distributed by the Dispatcher. 
  * @param extraNonce1 The extraNonce1 received from the pool via stratum in the mining.subscribe response.
  * @param extraNonce2NumBytes The number of bytes for the extraNonce2 as received from the pool via stratum in the mining.subscribe response.
  */
@@ -33,7 +32,6 @@ void taskDistributionLoop(
     const DifficultyTarget& basePoolDifficulty,
     DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
-    std::atomic<uint64_t>& dispatcherJobId,
     const std::vector<uint8_t>& extraNonce1,
     unsigned int extraNonce2NumBytes,
     const DispatcherSigningContext& signingCtx,

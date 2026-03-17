@@ -205,7 +205,6 @@ int main(int argc, char* argv[])
         return 1;
 
     std::atomic<bool> keepRunning = true; // Atomic flag to signal the rest of the app to stop.
-    std::atomic<uint64_t> numericDispatcherJobId = 0;
     std::atomic<uint64_t> nextStratumSendId = 3; // ids 1 and 2 were already used for protocol initialization
 
     // Maximum target for Dogecoin/Litecoin 0x1f00ffff (see https://bitcoin.stackexchange.com/questions/22929/full-example-data-for-scrypt-stratum-client)
@@ -223,7 +222,7 @@ int main(int argc, char* argv[])
     std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection));
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(numericDispatcherJobId), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx), std::ref(stats));
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), extraNonce2NumBytes, std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.
