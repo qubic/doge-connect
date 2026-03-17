@@ -69,6 +69,7 @@ struct TestDispatcherAppConfig
 struct TestMinerAppConfig
 {
     QubicConfig qubic;
+    DispatcherIdentityConfig identity;
 };
 
 /**

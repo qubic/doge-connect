@@ -48,6 +48,7 @@ target_include_directories(dispatcherlib
 
 source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES})
 
+target_compile_options(dispatcherlib PRIVATE -mavx2 -mrdrnd)
 target_link_libraries(dispatcherlib PUBLIC nlohmann_json::nlohmann_json PRIVATE hashutil qubiccrypto)
 
 # main executable

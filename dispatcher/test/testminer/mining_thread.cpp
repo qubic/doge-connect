@@ -12,6 +12,7 @@
 
 #include "concurrency/concurrent_queue.h"
 #include "connection/qubic_connection.h"
+#include "crypto/dispatcher_signing.h"
 #include "structs.h"
 
 #include "mining_structs.h"
@@ -24,13 +25,14 @@ void miningLoop(
     ConcurrentQueue<InternalMiningTask>& activeTasks,
     QubicConnection& connection,
     std::atomic<bool>& startNewJob,
-    std::atomic<uint64_t>& solutionsFound
+    std::atomic<uint64_t>& solutionsFound,
+    const DispatcherSigningContext& signingCtx
 )
 {
     std::array<uint8_t, 80> header;
     std::array<uint8_t, 32> merkleRoot;
     std::array<uint8_t, 32> scryptHash;
-    constexpr unsigned int minBufferSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution);
+    constexpr unsigned int minBufferSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
     std::vector<uint8_t> solutionBuffer(minBufferSize + 8);
 
     while (!st.stop_requested())
@@ -49,7 +51,7 @@ void miningLoop(
         memcpy(header.data(), task.partialHeader1.data(), task.partialHeader1.size());
         memcpy(header.data() + task.partialHeader1.size() + merkleRoot.size(), task.partialHeader2.data(), task.partialHeader2.size());
 
-        unsigned int totalNumBytes = minBufferSize + task.extraNonce2NumBytes;
+        unsigned int totalNumBytes = minBufferSize + task.extraNonce2NumBytes; // includes SIGNATURE_SIZE
         if (solutionBuffer.size() < totalNumBytes)
             solutionBuffer.resize(totalNumBytes);
 
@@ -102,6 +104,7 @@ void miningLoop(
 
                     uint64_t offset = sizeof(RequestResponseHeader);
                     CustomQubicMiningSolution* qubicSol = reinterpret_cast<CustomQubicMiningSolution*>(solutionBuffer.data() + offset);
+                    memcpy(qubicSol->sourcePublicKey.data(), signingCtx.publicKey.data(), 32);
                     qubicSol->jobId = task.jobId;
                     qubicSol->customMiningType = CustomMiningType::DOGE;
 
@@ -112,6 +115,12 @@ void miningLoop(
                     dogeSol->extraNonce2NumBytes = extraNonce2Vec.size();
                     offset += sizeof(QubicDogeMiningSolution);
                     memcpy(solutionBuffer.data() + offset, extraNonce2Vec.data(), extraNonce2Vec.size());
+                    offset += extraNonce2Vec.size();
+
+                    // Sign everything after the header (before the signature).
+                    const uint8_t* signDataStart = solutionBuffer.data() + sizeof(RequestResponseHeader);
+                    unsigned int signDataSize = offset - sizeof(RequestResponseHeader);
+                    signTaskPacket(signingCtx, signDataStart, signDataSize, solutionBuffer.data() + offset);
 
                     connection.sendMessage(reinterpret_cast<char*>(solutionBuffer.data()), totalNumBytes);
                 }

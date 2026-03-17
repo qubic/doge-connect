@@ -78,10 +78,13 @@ struct QubicDogeMiningTask
  */
 struct CustomQubicMiningSolution
 {
+    std::array<uint8_t, 32> sourcePublicKey; // public key of the sender (miner), used for signature verification
     uint64_t jobId; // numeric qubic dispatcher job id
     uint8_t customMiningType;
 
     // Followed by the specific solution struct, e.g. QubicDogeMiningSolution for CustomMiningType::DOGE.
+
+    // Followed by the sender's signature (SIGNATURE_SIZE bytes).
 
     static constexpr unsigned char type()
     {

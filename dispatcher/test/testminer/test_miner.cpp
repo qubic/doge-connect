@@ -22,6 +22,8 @@ typedef int SocketType;
 #include "concurrency/concurrent_queue.h"
 #include "connection/qubic_connection.h"
 #include "connection/connection.h"
+#include "crypto/dispatcher_signing.h"
+#include "crypto/key_utils.h"
 #include "threads/input_thread.h"
 #include "structs.h"
 
@@ -60,6 +62,23 @@ int main(int argc, char* argv[])
         std::cerr << "Invalid config: " << e.what() << std::endl;
         return 1;
     }
+
+    DispatcherSigningContext signingCtx;
+    if (!initSigningContext(config.identity.seed, signingCtx))
+    {
+        std::cerr << "Failed to derive signing keys from seed." << std::endl;
+        return 1;
+    }
+
+    char identity[61] = {0};
+    getIdentityFromPublicKey(signingCtx.publicKey.data(), identity, false);
+
+    std::string maskedSeed = config.identity.seed.substr(0, 3) + std::string(49, '*') + config.identity.seed.substr(52, 3);
+    std::cout << "=== Qubic Doge Test Miner ===" << std::endl;
+    std::cout << "Config:     " << configPath << std::endl;
+    std::cout << "Seed:       " << maskedSeed << std::endl;
+    std::cout << "Identity:   " << identity << std::endl;
+    std::cout << "=============================" << std::endl;
 
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
@@ -138,7 +157,7 @@ int main(int argc, char* argv[])
     // Start the taskRecvThread to receive tasks from the dispatcher.
     std::jthread taskRecvThread(taskReceiveLoop, std::ref(activeTasks), std::ref(connection), std::ref(startNewJob));
     // Start the miningThread to mine received tasks and send found solutions back to dispatcher.
-    std::jthread miningThread(miningLoop, std::ref(activeTasks), std::ref(connection), std::ref(startNewJob), std::ref(solutionsFound));
+    std::jthread miningThread(miningLoop, std::ref(activeTasks), std::ref(connection), std::ref(startNewJob), std::ref(solutionsFound), std::ref(signingCtx));
 
     while (keepRunning)
     {

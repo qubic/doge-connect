@@ -22,13 +22,14 @@ typedef struct pollfd pollfd_t;
 
 #include "concurrency/concurrent_queue.h"
 #include "connection/qubic_connection.h"
+#include "k12_and_key_utils.h"
 #include "structs.h"
 
 constexpr unsigned long pollTimeoutMilliSec = 200;
 
 void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<DispatcherMiningSolution>& queue)
 {
-    unsigned int requiredMinSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution);
+    unsigned int requiredMinSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
     if (recvBytes < requiredMinSize)
         return;
 
@@ -47,7 +48,18 @@ void processSolution(char* recvData, unsigned int recvBytes, ConcurrentQueue<Dis
     QubicDogeMiningSolution* dogeSol = reinterpret_cast<QubicDogeMiningSolution*>(recvData + offset);
     if (requiredMinSize + dogeSol->extraNonce2NumBytes != recvBytes)
         return;
-    
+
+    // Verify signature: covers everything after the header, before the trailing 64-byte signature.
+    const unsigned int messageSize = recvBytes - sizeof(RequestResponseHeader);
+    const uint8_t* payload = reinterpret_cast<const uint8_t*>(recvData + sizeof(RequestResponseHeader));
+    unsigned char digest[32];
+    KangarooTwelve(payload, messageSize - SIGNATURE_SIZE, digest, 32);
+    if (!verify(qubicSol->sourcePublicKey.data(), digest, payload + (messageSize - SIGNATURE_SIZE)))
+    {
+        std::cerr << "processSolution: Invalid signature, dropping solution." << std::endl;
+        return;
+    }
+
     DispatcherMiningSolution dispSol =
     {
         .jobId = qubicSol->jobId,

@@ -86,5 +86,6 @@ TestMinerAppConfig parseTestMinerConfig(const nlohmann::json& j)
 {
     TestMinerAppConfig config;
     config.qubic = parseQubicConfig(j);
+    config.identity = parseIdentityConfig(j);
     return config;
 }
