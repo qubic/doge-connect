@@ -190,6 +190,30 @@ void distributeTask(
     stats.tasksDistributed++;
 }
 
+void checkShareResponse(const nlohmann::json& msg)
+{
+    // This is the response to a share submission via 'mining.submit'.
+    unsigned int shareId = msg["id"];
+    // TODO: verify that id matches submitted share.
+    if (msg["result"] == false)
+    {
+        // Share was rejected, the error contains the reason.
+        // Example JSON: {"id": 4, "result": false, "error": [21, "Job not found", null]}
+        std::cout << "Share with submission id " << shareId << " was rejected by pool.";
+        if (msg["error"] != nullptr && msg["error"].size() > 1)
+        {
+            std::cout << " Reason: " << msg["error"][1] << " (error code " << msg["error"][0] << ").";
+        }
+        std::cout << std::endl;
+    }
+    else
+    {
+        // Share was accepted.
+        // Example JSON: {"id": 4, "result": true, "error": null}
+        std::cout << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
+    }
+}
+
 void taskDistributionLoop(
     std::stop_token st,
     ConcurrentQueue<nlohmann::json>& queue,
@@ -245,19 +269,7 @@ void taskDistributionLoop(
                     }
                     else if (nextMsg["id"].is_number_unsigned())
                     {
-                        // Process share responses inline so they aren't lost.
-                        unsigned int shareId = nextMsg["id"];
-                        if (nextMsg["result"] == false)
-                        {
-                            std::cout << "Share with submission id " << shareId << " was rejected by pool.";
-                            if (nextMsg["error"] != nullptr && nextMsg["error"].size() > 1)
-                                std::cout << " Reason: " << nextMsg["error"][1] << " (error code " << nextMsg["error"][0] << ").";
-                            std::cout << std::endl;
-                        }
-                        else
-                        {
-                            std::cout << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
-                        }
+                        checkShareResponse(nextMsg);
                     }
                 }
                 if (skipped > 0)
@@ -269,26 +281,7 @@ void taskDistributionLoop(
         }
         else if (msg["id"].is_number_unsigned())
         {
-            // This is the response to a share submission via 'mining.submit'.
-            unsigned int shareId = msg["id"];
-            // TODO: verify that id matches submitted share.
-            if (msg["result"] == false)
-            {
-                // Share was rejected, the error contains the reason.
-                // Example JSON: {"id": 4, "result": false, "error": [21, "Job not found", null]}
-                std::cout << "Share with submission id " << shareId << " was rejected by pool.";
-                if (msg["error"] != nullptr && msg["error"].size() > 1)
-                {
-                    std::cout << " Reason: " << msg["error"][1] << " (error code " << msg["error"][0] << ").";
-                }
-                std::cout << std::endl;
-            }
-            else
-            {
-                // Share was accepted.
-                // Example JSON: {"id": 4, "result": true, "error": null}
-                std::cout << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
-            }
+            checkShareResponse(msg);
         }
     }
 }
