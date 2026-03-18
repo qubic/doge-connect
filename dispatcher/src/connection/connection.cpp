@@ -97,7 +97,10 @@ bool Connection::sendMessage(const std::string& msg)
     {
         int sent = send(m_socket.rawSocket, msg.c_str() + totalSent, msg.size() - totalSent, 0);
         if (sent == -1)
+        {
+            m_socket.isConnected = false;
             return false;
+        }
         totalSent += sent;
     }
 
