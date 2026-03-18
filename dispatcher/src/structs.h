@@ -40,7 +40,7 @@ struct CustomQubicMiningTask
 
     static constexpr unsigned char type()
     {
-        return 68; // TODO: adapt when final ID is known
+        return 68;
     }
 };
 
@@ -88,7 +88,7 @@ struct CustomQubicMiningSolution
 
     static constexpr unsigned char type()
     {
-        return 69; // TODO: adapt when final ID is known
+        return 69;
     }
 };
 
