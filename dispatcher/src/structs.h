@@ -31,7 +31,7 @@ enum CustomMiningType : uint8_t
  */
 struct CustomQubicMiningTask
 {
-    uint64_t jobId; // numeric qubic dispatcher job id
+    uint64_t jobId; // millisecond timestamp as dispatcher job id
     uint8_t customMiningType;
 
     // Followed by the specific task struct, e.g. QubicDogeMiningTask for CustomMiningType::DOGE.
@@ -79,7 +79,7 @@ struct QubicDogeMiningTask
 struct CustomQubicMiningSolution
 {
     std::array<uint8_t, 32> sourcePublicKey; // public key of the sender (miner), used for signature verification
-    uint64_t jobId; // numeric qubic dispatcher job id
+    uint64_t jobId; // millisecond timestamp as dispatcher job id
     uint8_t customMiningType;
 
     // Followed by the specific solution struct, e.g. QubicDogeMiningSolution for CustomMiningType::DOGE.
@@ -133,7 +133,7 @@ struct DispatcherMiningTask
  */
 struct DispatcherMiningSolution
 {
-    uint64_t jobId; // numeric qubic dispatcher job id
+    uint64_t jobId; // millisecond timestamp as dispatcher job id
     std::array<uint8_t, 4> nonce; // little endian
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as it appears in the header
     std::vector<uint8_t> extraNonce2; // same byte order as it was used to create the merkle root

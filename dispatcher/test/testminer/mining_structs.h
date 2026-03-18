@@ -9,7 +9,7 @@
  */
 struct InternalMiningTask
 {
-    uint64_t jobId; // numeric qubic dispatcher job id
+    uint64_t jobId; // millisecond timestamp as dispatcher job id
 
     std::array<uint8_t, 32> targetDispatcher; // dispatcher difficulty target converted to a 256-bit number (little endian)
 
