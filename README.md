@@ -20,7 +20,7 @@ enum CustomMiningType : uint8_t
  */
 struct CustomQubicMiningTask
 {
-    uint64_t jobId; // numeric qubic dispatcher job id
+    uint64_t jobId; // millisecond timestamp as dispatcher job id
     uint8_t customMiningType;
 
     // Followed by the specific task struct, e.g. QubicDogeMiningTask for CustomMiningType::DOGE.
@@ -34,7 +34,7 @@ struct CustomQubicMiningTask
 struct CustomQubicMiningSolution
 {
     std::array<uint8_t, 32> sourcePublicKey; // public key of the sender (miner), used for signature verification
-    uint64_t jobId; // numeric qubic dispatcher job id
+    uint64_t jobId; // millisecond timestamp as dispatcher job id
     uint8_t customMiningType;
 
     // Followed by the specific solution struct, e.g. QubicDogeMiningSolution for CustomMiningType::DOGE.
