@@ -25,6 +25,7 @@ void distributeTask(
     const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
     std::atomic<unsigned int>& extraNonce2NumBytes,
+    bool propagateCleanJobFlag,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats
 )
@@ -43,7 +44,7 @@ void distributeTask(
     // cleanJobQueue: true
     // --------------------
 
-    bool cleanJobQueue = params[8];
+    bool cleanJobQueue = params[8].get<bool>() || propagateCleanJobFlag;
     if (cleanJobQueue)
         activeTasks.clear();
 
@@ -247,8 +248,10 @@ void taskDistributionLoop(
             {
                 // Drain any additional queued messages so we only distribute the latest job.
                 // This avoids sending a burst of stale jobs during startup or after reconnect.
+                // Check for cleanJobQueue flag and propagate it to the latest job.
                 nlohmann::json latestNotify = std::move(msg);
                 unsigned int skipped = 0;
+                bool cleanJobQueue = msg["params"][8];
                 while (auto next = queue.try_pop())
                 {
                     nlohmann::json& nextMsg = *next;
@@ -264,6 +267,7 @@ void taskDistributionLoop(
                         else if (nextMsg["method"] == "mining.notify")
                         {
                             skipped++;
+                            cleanJobQueue |= nextMsg["params"][8].get<bool>();
                             latestNotify = std::move(nextMsg);
                         }
                     }
@@ -276,7 +280,7 @@ void taskDistributionLoop(
                     std::cout << "Skipped " << skipped << " queued job(s), distributing latest only." << std::endl;
 
                 distributeTask(std::move(latestNotify), activeTasks, connections, currentPoolDifficulty,
-                    dispatcherDifficulty, extraNonce1, extraNonce2NumBytes, signingCtx, stats);
+                    dispatcherDifficulty, extraNonce1, extraNonce2NumBytes, cleanJobQueue, signingCtx, stats);
             }
         }
         else if (msg["id"].is_number_unsigned())
