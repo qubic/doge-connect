@@ -133,7 +133,7 @@ static void buildPollList(std::vector<QubicConnection>& connections, std::vector
 struct ReconnectState
 {
     unsigned int delaySec = reconnectBaseDelaySec;
-    SteadyClock::time_point nextRetryTime = SteadyClock::time_point::min(); // min = no pending reconnect
+    SteadyClock::time_point nextRetryTime = (SteadyClock::time_point::min)(); // min = no pending reconnect
 
     void scheduleRetry()
     {
@@ -148,10 +148,10 @@ struct ReconnectState
     void reset()
     {
         delaySec = reconnectBaseDelaySec;
-        nextRetryTime = SteadyClock::time_point::min();
+        nextRetryTime = (SteadyClock::time_point::min)();
     }
 
-    bool isPending() const { return nextRetryTime != SteadyClock::time_point::min(); }
+    bool isPending() const { return nextRetryTime != (SteadyClock::time_point::min)(); }
     bool isReady() const { return isPending() && SteadyClock::now() >= nextRetryTime; }
 };
 
