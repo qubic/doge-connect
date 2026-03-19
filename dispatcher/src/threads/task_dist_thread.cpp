@@ -251,7 +251,7 @@ void taskDistributionLoop(
                 // Check for cleanJobQueue flag and propagate it to the latest job.
                 nlohmann::json latestNotify = std::move(msg);
                 unsigned int skipped = 0;
-                bool cleanJobQueue = msg["params"][8];
+                bool cleanJobQueue = latestNotify["params"][8].get<bool>();
                 while (auto next = queue.try_pop())
                 {
                     nlohmann::json& nextMsg = *next;
