@@ -1,5 +1,7 @@
 #include <string>
 #include <iostream>
+
+#include "log.h"
 #include <cstring>
 #include <thread>
 #include <chrono>
@@ -54,14 +56,14 @@ int main(int argc, char* argv[])
     }
     catch (const std::exception& e)
     {
-        std::cerr << "Invalid config: " << e.what() << std::endl;
+        ERR() << "Invalid config: " << e.what() << std::endl;
         return 1;
     }
 
     DispatcherSigningContext signingCtx;
     if (!initSigningContext(config.identity.seed, signingCtx))
     {
-        std::cerr << "Failed to derive signing keys from seed." << std::endl;
+        ERR() << "Failed to derive signing keys from seed." << std::endl;
         return 1;
     }
 
@@ -71,47 +73,47 @@ int main(int argc, char* argv[])
 
     // Print startup configuration summary.
     std::string maskedSeed = config.identity.seed.substr(0, 3) + std::string(49, '*') + config.identity.seed.substr(52, 3);
-    std::cout << "=== Qubic Doge Dispatcher ===" << std::endl;
-    std::cout << "Config:     " << configPath << std::endl;
-    std::cout << "Pool:       " << config.pool.url << ":" << config.pool.stratumPort << std::endl;
-    std::cout << "Worker:     " << config.pool.workerName << std::endl;
-    std::cout << "Qubic IPs:  " << config.qubic.ips.size() << " (port " << config.qubic.port << ")" << std::endl;
-    std::cout << "Seed:       " << maskedSeed << std::endl;
-    std::cout << "Identity:   " << identity << std::endl;
-    std::cout << "=============================" << std::endl;
+    LOG() << "=== Qubic Doge Dispatcher ===" << std::endl;
+    LOG() << "Config:     " << configPath << std::endl;
+    LOG() << "Pool:       " << config.pool.url << ":" << config.pool.stratumPort << std::endl;
+    LOG() << "Worker:     " << config.pool.workerName << std::endl;
+    LOG() << "Qubic IPs:  " << config.qubic.ips.size() << " (port " << config.qubic.port << ")" << std::endl;
+    LOG() << "Seed:       " << maskedSeed << std::endl;
+    LOG() << "Identity:   " << identity << std::endl;
+    LOG() << "=============================" << std::endl;
 
     std::unique_ptr<ConnectionContext> context = ConnectionContext::makeConnectionContext();
     if (!context)
     {
-        std::cerr << "ConnectionContext (only relevant for WSAStartup on Windows) could not be created." << std::endl;
+        ERR() << "ConnectionContext (only relevant for WSAStartup on Windows) could not be created." << std::endl;
         return 1;
     }
 
     Connection stratumConnection;
     if (!stratumConnection.openConnection(config.pool.url, config.pool.stratumPort))
     {
-        std::cerr << "Stratum connection could not be opened." << std::endl;
+        ERR() << "Stratum connection could not be opened." << std::endl;
         return 1;
     }
     else
-        std::cout << "Stratum connection successfully opened." << std::endl;
+        LOG() << "Stratum connection successfully opened." << std::endl;
 
     std::vector<QubicConnection> qubicConnections;
     for (int i = 0; i < config.qubic.ips.size(); ++i)
     {
         QubicConnection qc;
         if (!qc.openQubicConnection(config.qubic.ips[i], config.qubic.port))
-            std::cerr << "Qubic connection could not be opened to IP " << config.qubic.ips[i] << std::endl;
+            ERR() << "Qubic connection could not be opened to IP " << config.qubic.ips[i] << std::endl;
         else
             qubicConnections.push_back(std::move(qc));
     }
     if (qubicConnections.empty())
     {
-        std::cerr << "No Qubic connection was opened successfully (out of " << config.qubic.ips.size() << " provided IPs)." << std::endl;
+        ERR() << "No Qubic connection was opened successfully (out of " << config.qubic.ips.size() << " provided IPs)." << std::endl;
         return 1;
     }
     else
-        std::cout << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << config.qubic.ips.size() << " IPs." << std::endl;
+        LOG() << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << config.qubic.ips.size() << " IPs." << std::endl;
 
     // Create a queue for received stratum messages.
     ConcurrentQueue<nlohmann::json> recvStratumMessages;
@@ -151,14 +153,14 @@ int main(int argc, char* argv[])
     std::jthread shareValidThread(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
         std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName, std::ref(stats));
 
-    std::cout << "Dispatcher running. Press 'q' to quit." << std::endl;
+    LOG() << "Dispatcher running. Press 'q' to quit." << std::endl;
 
     while (keepRunning)
     {
         // TODO: replace the sleep below with condition_variable::wait_for(...) with the time and keepRunning.
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
-        std::cout << "[status] tasks distributed: " << stats.tasksDistributed
+        LOG() << "[status] tasks distributed: " << stats.tasksDistributed
             << " | solutions recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
             << " | pool shares: " << stats.solutionsPassedPoolDiff
             << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()

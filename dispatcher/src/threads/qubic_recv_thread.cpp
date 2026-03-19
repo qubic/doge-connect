@@ -3,6 +3,8 @@
 #include <thread>
 #include <stop_token>
 #include <iostream>
+
+#include "log.h"
 #include <vector>
 #include <cstdint>
 
@@ -63,7 +65,7 @@ void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<Di
     KangarooTwelve(payload, messageSize - SIGNATURE_SIZE, digest, 32);
     if (!verify(qubicSol->sourcePublicKey.data(), digest, payload + (messageSize - SIGNATURE_SIZE)))
     {
-        std::cerr << "processSolution: Invalid signature, dropping solution." << std::endl;
+        ERR() << "processSolution: Invalid signature, dropping solution." << std::endl;
         return;
     }
 
@@ -158,11 +160,11 @@ struct ReconnectState
 // Mark a connection as disconnected and schedule a reconnect attempt.
 static void markDisconnected(QubicConnection& conn, std::vector<char>& recvBuf, ReconnectState& rs, const char* reason)
 {
-    std::cerr << "qubicReceiveLoop: Connection to " << conn.getPeerIp() << " lost (" << reason << ")." << std::endl;
+    ERR() << "qubicReceiveLoop: Connection to " << conn.getPeerIp() << " lost (" << reason << ")." << std::endl;
     conn.closeConnection();
     recvBuf.clear();
     rs.scheduleRetry();
-    std::cout << "qubicReceiveLoop: Will reconnect to " << conn.getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
+    LOG() << "qubicReceiveLoop: Will reconnect to " << conn.getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
 }
 
 // Try pending reconnects (non-blocking: only attempts connections whose delay has elapsed).
@@ -177,16 +179,16 @@ static bool tryPendingReconnects(std::vector<QubicConnection>& connections, std:
 
         if (connections[i].reconnect())
         {
-            std::cout << "qubicReceiveLoop: Reconnected to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
+            LOG() << "qubicReceiveLoop: Reconnected to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
             rs.reset();
             anyReconnected = true;
         }
         else
         {
-            std::cerr << "qubicReceiveLoop: Reconnect failed for " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
+            ERR() << "qubicReceiveLoop: Reconnect failed for " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
             rs.backoff();
             rs.scheduleRetry();
-            std::cout << "qubicReceiveLoop: Will retry " << connections[i].getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
+            LOG() << "qubicReceiveLoop: Will retry " << connections[i].getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
         }
     }
     return anyReconnected;
@@ -256,7 +258,7 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
         }
         else if (numSockWithData < 0)
         {
-            std::cerr << "qubicReceiveLoop: Poll error (" << GET_SOCKET_ERR << "), rebuilding poll list." << std::endl;
+            ERR() << "qubicReceiveLoop: Poll error (" << GET_SOCKET_ERR << "), rebuilding poll list." << std::endl;
             buildPollList(connections, socketPollList, pollToConnIdx);
         }
     }

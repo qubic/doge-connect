@@ -5,6 +5,8 @@
 #include <memory>
 #include <cstring>
 
+#include "log.h"
+
 #ifdef _MSC_VER
 #pragma comment(lib, "Ws2_32.lib")
 #include <Winsock2.h>
@@ -29,7 +31,7 @@ std::unique_ptr<ConnectionContext> ConnectionContext::makeConnectionContext()
     // Try to initialize winsock on Windows
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "WSAStartup failed." << std::endl;
+        ERR() << "WSAStartup failed." << std::endl;
         return nullptr;
     }
 #endif
@@ -78,7 +80,7 @@ bool Connection::setTimeout(int optName, unsigned long milliseconds)
 #endif
     if (setsockopt(m_socket.rawSocket, SOL_SOCKET, optName, (const char*)&tv, sizeof tv) != 0)
     {
-        std::cerr << "setsockopt failed with error: " << GET_SOCKET_ERR << std::endl;
+        ERR() << "setsockopt failed with error: " << GET_SOCKET_ERR << std::endl;
         return false;
     }
     return true;
@@ -88,7 +90,7 @@ bool Connection::sendMessage(const std::string& msg)
 {
     if (!m_socket.isConnected)
     {
-        std::cerr << "Socket is not connected, failed to send" << std::endl;
+        ERR() << "Socket is not connected, failed to send" << std::endl;
         return false;
     }
 
@@ -134,7 +136,7 @@ std::string Connection::receiveResponse()
 
     if (!m_socket.isConnected)
     {
-        std::cerr << "Socket is not connected, failed to receive" << std::endl;
+        ERR() << "Socket is not connected, failed to receive" << std::endl;
         return res;
     }
 
@@ -148,7 +150,7 @@ int Connection::receiveResponse(char* buffer, unsigned int size)
 {
     if (!m_socket.isConnected)
     {
-        std::cerr << "Socket is not connected, failed to receive" << std::endl;
+        ERR() << "Socket is not connected, failed to receive" << std::endl;
         return -1;
     }
 
@@ -159,7 +161,7 @@ bool Connection::receiveAllData(char* buffer, unsigned int size)
 {
     if (!m_socket.isConnected)
     {
-        std::cerr << "Socket is not connected, failed to receive" << std::endl;
+        ERR() << "Socket is not connected, failed to receive" << std::endl;
         return false;
     }
 
@@ -189,7 +191,7 @@ bool Connection::openConnection(const std::string& host, const std::string& port
 
     if (getaddrinfo(host.c_str(), port.c_str(), &hints, &result) != 0)
     {
-        std::cerr << "DNS lookup failed." << std::endl;
+        ERR() << "DNS lookup failed." << std::endl;
         return false;
     }
 
@@ -197,7 +199,7 @@ bool Connection::openConnection(const std::string& host, const std::string& port
     m_socket.rawSocket = socket(result->ai_family, result->ai_socktype, result->ai_protocol);
     if (connect(m_socket.rawSocket, result->ai_addr, result->ai_addrlen) == SOCKET_ERROR)
     {
-        std::cerr << "Connection failed: " << GET_SOCKET_ERR << std::endl;
+        ERR() << "Connection failed: " << GET_SOCKET_ERR << std::endl;
         freeaddrinfo(result);
         m_socket.reset();
         return false;

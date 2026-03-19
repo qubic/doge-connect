@@ -3,6 +3,8 @@
 #include <thread>
 #include <stop_token>
 #include <iostream>
+
+#include "log.h"
 #include <chrono>
 #include <atomic>
 
@@ -28,7 +30,7 @@ bool initStratumProtocol(
     std::string subscribeResponse = connection.receiveResponse();
     if (subscribeResponse.empty())
     {
-        std::cerr << "No response received from pool for mining.subscribe." << std::endl;
+        ERR() << "No response received from pool for mining.subscribe." << std::endl;
         return false;
     }
     auto response = nlohmann::json::parse(subscribeResponse);
@@ -39,11 +41,11 @@ bool initStratumProtocol(
         std::string extraNonce1String = result[1];
         extraNonce1 = hexToBytes(extraNonce1String, ByteArrayFormat::BigEndian);
         extraNonce2NumBytes = result[2];
-        std::cout << "Received extraNonce1 " << extraNonce1String << ", size of extraNonce2 in bytes: " << extraNonce2NumBytes << std::endl;
+        LOG() << "Received extraNonce1 " << extraNonce1String << ", size of extraNonce2 in bytes: " << extraNonce2NumBytes << std::endl;
     }
     else
     {
-        std::cerr << "Mining subscribe response could not be parsed." << std::endl;
+        ERR() << "Mining subscribe response could not be parsed." << std::endl;
         return false;
     }
 
@@ -71,7 +73,7 @@ bool initStratumProtocol(
             // Check that authorization worked.
             if (response["result"] == false || response["error"] != nullptr)
             {
-                std::cerr << "Mining authorization did not work." << std::endl;
+                ERR() << "Mining authorization did not work." << std::endl;
                 return false;
             }
         }
@@ -102,7 +104,7 @@ void stratumReceiveLoop(
 
         if (bytesRead <= 0)
         {
-            std::cerr << "stratumReceiveLoop: Stratum connection lost." << std::endl;
+            ERR() << "stratumReceiveLoop: Stratum connection lost." << std::endl;
             connection.closeConnection();
             networkBuffer.clear();
 
@@ -110,7 +112,7 @@ void stratumReceiveLoop(
             unsigned int delaySec = stratumReconnectBaseDelaySec;
             while (!st.stop_requested())
             {
-                std::cout << "stratumReceiveLoop: Reconnecting to pool in " << delaySec << "s..." << std::endl;
+                LOG() << "stratumReceiveLoop: Reconnecting to pool in " << delaySec << "s..." << std::endl;
                 for (unsigned int elapsed = 0; elapsed < delaySec && !st.stop_requested(); ++elapsed)
                     std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -122,13 +124,13 @@ void stratumReceiveLoop(
                     if (initStratumProtocol(connection, queue, extraNonce1, extraNonce2NumBytes,
                             poolConfig.workerName, poolConfig.workerPassword))
                     {
-                        std::cout << "stratumReceiveLoop: Reconnected to pool." << std::endl;
+                        LOG() << "stratumReceiveLoop: Reconnected to pool." << std::endl;
                         break;
                     }
                     connection.closeConnection();
                 }
 
-                std::cerr << "stratumReceiveLoop: Reconnect failed." << std::endl;
+                ERR() << "stratumReceiveLoop: Reconnect failed." << std::endl;
                 delaySec = (std::min)(delaySec * 2, stratumReconnectMaxDelaySec);
             }
             continue;

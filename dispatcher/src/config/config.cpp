@@ -3,12 +3,14 @@
 #include <fstream>
 #include <iostream>
 
+#include "log.h"
+
 std::optional<nlohmann::json> loadConfigFile(const std::string& filePath)
 {
     std::ifstream file(filePath);
     if (!file.is_open())
     {
-        std::cerr << "Could not open config file: " << filePath << std::endl;
+        ERR() << "Could not open config file: " << filePath << std::endl;
         return std::nullopt;
     }
 
@@ -19,7 +21,7 @@ std::optional<nlohmann::json> loadConfigFile(const std::string& filePath)
     }
     catch (const nlohmann::json::parse_error& e)
     {
-        std::cerr << "Failed to parse config file: " << e.what() << std::endl;
+        ERR() << "Failed to parse config file: " << e.what() << std::endl;
         return std::nullopt;
     }
 }

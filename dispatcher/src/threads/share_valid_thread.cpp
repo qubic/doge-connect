@@ -2,6 +2,8 @@
 
 #include <stop_token>
 #include <iostream>
+
+#include "log.h"
 #include <optional>
 #include <cstdint>
 #include <cstring>
@@ -39,7 +41,7 @@ void shareValidationLoop(
         std::optional<DispatcherMiningTask> taskOptional = activeTasks.get(sol.jobId);
         if (!taskOptional.has_value())
         {
-            std::cout << "shareValidationLoop: Ignoring stale submitted solution (dispatcher jobId " << sol.jobId << ")." << std::endl;
+            LOG() << "shareValidationLoop: Ignoring stale submitted solution (dispatcher jobId " << sol.jobId << ")." << std::endl;
             stats.solutionsRejected++;
             continue;
         }
@@ -49,7 +51,7 @@ void shareValidationLoop(
         // Check that extraNonce2 has expected size.
         if (task.extraNonce2NumBytes != sol.extraNonce2.size())
         {
-            std::cout << "shareValidationLoop: Ignoring submitted solution with wrong size of extraNonce2 ("
+            LOG() << "shareValidationLoop: Ignoring submitted solution with wrong size of extraNonce2 ("
                 << sol.extraNonce2.size() << " vs. " << task.extraNonce2NumBytes << ")." << std::endl;
             stats.solutionsRejected++;
             continue;
@@ -67,7 +69,7 @@ void shareValidationLoop(
 
         if (offset != 80)
         {
-            std::cerr << "shareValidationLoop: Something is wrong with the header size (should be 80 bytes)." << std::endl;
+            ERR() << "shareValidationLoop: Something is wrong with the header size (should be 80 bytes)." << std::endl;
             stats.solutionsRejected++;
             continue;
         }
@@ -76,12 +78,12 @@ void shareValidationLoop(
 
         if (!verifyHashVsTarget(scryptHash, task.targetDispatcher))
         {
-            std::cout << "shareValidationLoop: Submitted solution FAILED Dispatcher target difficulty." << std::endl;
+            LOG() << "shareValidationLoop: Submitted solution FAILED Dispatcher target difficulty." << std::endl;
             stats.solutionsRejected++;
             continue;
         }
 
-        std::cout << "shareValidationLoop: Submitted solution PASSED Dispatcher target difficulty." << std::endl;
+        LOG() << "shareValidationLoop: Submitted solution PASSED Dispatcher target difficulty." << std::endl;
         stats.solutionsAccepted++;
 
         if (verifyHashVsTarget(scryptHash, task.targetPool))

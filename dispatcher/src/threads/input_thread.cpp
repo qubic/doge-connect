@@ -2,6 +2,8 @@
 
 #include <atomic>
 #include <iostream>
+
+#include "log.h"
 #include <thread>
 #include <chrono>
 #include <stop_token>
@@ -45,7 +47,7 @@ int linux_kbhit()
 
 void inputThreadLoop(std::stop_token st, std::atomic<bool>& keepRunning)
 {
-    std::cout << "Input thread started. Press 'q' to stop dispatcher." << std::endl;
+    LOG() << "Input thread started. Press 'q' to stop dispatcher." << std::endl;
 
     while (!st.stop_requested() && keepRunning)
     {
@@ -62,5 +64,5 @@ void inputThreadLoop(std::stop_token st, std::atomic<bool>& keepRunning)
 #endif
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
-    std::cout << "Shutdown signal received..." << std::endl;
+    LOG() << "Shutdown signal received..." << std::endl;
 }

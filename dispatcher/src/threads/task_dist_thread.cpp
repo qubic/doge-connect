@@ -2,6 +2,8 @@
 
 #include <stop_token>
 #include <iostream>
+
+#include "log.h"
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -60,7 +62,7 @@ void distributeTask(
 
     if (version.size() != 4 || prevHash.size() != 32 || ntime.size() != 4 || nbits.size() != 4)
     {
-        std::cerr << "distributeTask: unexpected size encountered ("
+        ERR() << "distributeTask: unexpected size encountered ("
             << "version " << version.size() << " vs 4, "
             << "nTime " << ntime.size() << " vs 4, "
             << "nBits " << nbits.size() << " vs 4, "
@@ -102,7 +104,7 @@ void distributeTask(
     totalNumBytes += SIGNATURE_SIZE;
     if (totalNumBytes > buffer.size())
     {
-        std::cerr << "distributeTask: QubicDogeMiningTask including payload is larger than buffer." << std::endl;
+        ERR() << "distributeTask: QubicDogeMiningTask including payload is larger than buffer." << std::endl;
         return;
     }
 
@@ -166,7 +168,7 @@ void distributeTask(
 
     if (offset != totalNumBytes)
     {
-        std::cerr << "distributeTask: Something went wrong in building QubicDogeMiningTask or its payload" << std::endl;
+        ERR() << "distributeTask: Something went wrong in building QubicDogeMiningTask or its payload" << std::endl;
         return;
     }
 
@@ -177,7 +179,7 @@ void distributeTask(
         if (connection.sendMessage(buffer.data(), totalNumBytes))
             numSends++;
     }
-    std::cout << "Task " << qubicTask->jobId << " sent (" << numSends << "/" << connections.size() << " conns)"
+    LOG() << "Task " << qubicTask->jobId << " sent (" << numSends << "/" << connections.size() << " conns)"
         << " | pool job: " << dispatcherTask.taskId
         << " | prevHash: " << std::string(params[1]).substr(0, 16) << "..."
         << " | nTime: " << std::string(params[7])
@@ -200,18 +202,16 @@ void checkShareResponse(const nlohmann::json& msg)
     {
         // Share was rejected, the error contains the reason.
         // Example JSON: {"id": 4, "result": false, "error": [21, "Job not found", null]}
-        std::cout << "Share with submission id " << shareId << " was rejected by pool.";
         if (msg["error"] != nullptr && msg["error"].size() > 1)
-        {
-            std::cout << " Reason: " << msg["error"][1] << " (error code " << msg["error"][0] << ").";
-        }
-        std::cout << std::endl;
+            LOG() << "Share with submission id " << shareId << " was rejected by pool. Reason: " << msg["error"][1] << " (error code " << msg["error"][0] << ")." << std::endl;
+        else
+            LOG() << "Share with submission id " << shareId << " was rejected by pool." << std::endl;
     }
     else
     {
         // Share was accepted.
         // Example JSON: {"id": 4, "result": true, "error": null}
-        std::cout << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
+        LOG() << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
     }
 }
 
@@ -277,7 +277,7 @@ void taskDistributionLoop(
                     }
                 }
                 if (skipped > 0)
-                    std::cout << "Skipped " << skipped << " queued job(s), distributing latest only." << std::endl;
+                    LOG() << "Skipped " << skipped << " queued job(s), distributing latest only." << std::endl;
 
                 distributeTask(std::move(latestNotify), activeTasks, connections, currentPoolDifficulty,
                     dispatcherDifficulty, extraNonce1, extraNonce2NumBytes, cleanJobQueue, signingCtx, stats);

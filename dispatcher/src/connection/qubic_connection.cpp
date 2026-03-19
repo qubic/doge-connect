@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <cstring>
 
+#include "log.h"
+
 #ifdef _MSC_VER
 #pragma comment(lib, "Ws2_32.lib")
 #include <Winsock2.h>
@@ -57,12 +59,12 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
         recvByte = receiveResponse(reinterpret_cast<char*>(&header), sizeof(RequestResponseHeader));
         if (recvByte != sizeof(RequestResponseHeader))
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: No header received." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: No header received." << std::endl;
             return;
         }
         if (header.type() == END_RESPONSE_TYPE)
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: Unexpected EndResponse received." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: Unexpected EndResponse received." << std::endl;
             return;
         }
         if (header.type() != T::type())
@@ -72,7 +74,7 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
             remainingSize = packetSize - sizeof(RequestResponseHeader);
             if (!receiveAllData(m_buffer.data(), remainingSize))
             {
-                std::cerr << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
+                ERR() << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
                 return;
             }
             else
@@ -89,7 +91,7 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
         memset(m_buffer.data(), 0, sizeof(T));
         if (!receiveAllData(m_buffer.data(), remainingSize))
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
             return;
         }
         result = *(reinterpret_cast<T*>(m_buffer.data()));
@@ -108,17 +110,17 @@ template <typename T> int QubicConnection::receivePacketAndExtraDataWithHeaderAs
         recvByte = receiveResponse(reinterpret_cast<char*>(&header), sizeof(RequestResponseHeader));
         if (recvByte == 0 || recvByte == -1)
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: No connection." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: No connection." << std::endl;
             return 0;
         }
         if (recvByte != sizeof(RequestResponseHeader))
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: No header received." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: No header received." << std::endl;
             return -1;
         }
         if (header.type() == END_RESPONSE_TYPE)
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: Unexpected EndResponse received." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: Unexpected EndResponse received." << std::endl;
             return -1;
         }
         if (header.type() != T::type())
@@ -128,7 +130,7 @@ template <typename T> int QubicConnection::receivePacketAndExtraDataWithHeaderAs
             remainingSize = packetSize - sizeof(RequestResponseHeader);
             if (!receiveAllData(m_buffer.data(), remainingSize))
             {
-                std::cerr << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
+                ERR() << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
                 return -1;
             }
             else
@@ -144,7 +146,7 @@ template <typename T> int QubicConnection::receivePacketAndExtraDataWithHeaderAs
     {
         if (!receiveAllData(buffer, remainingSize))
         {
-            std::cerr << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
+            ERR() << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
             return -1;
         }
     }
@@ -175,7 +177,7 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
 
     if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) <= 0)
     {
-        std::cerr << "Error translating IP address to usable one." << std::endl;
+        ERR() << "Error translating IP address to usable one." << std::endl;
         m_socket.reset();
         return false;
     }
@@ -186,7 +188,7 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
     if (connect(m_socket.rawSocket, (const sockaddr*)&addr, sizeof(addr)) < 0)
 #endif
     {
-        std::cerr << "Connection failed for IP " << ip << " on port " << port << ": " << GET_SOCKET_ERR << std::endl;
+        ERR() << "Connection failed for IP " << ip << " on port " << port << ": " << GET_SOCKET_ERR << std::endl;
         m_socket.reset();
         return false;
     }
