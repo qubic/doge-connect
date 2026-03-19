@@ -193,6 +193,9 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
 
     m_socket.isConnected = true;
 
+    // Set a timeout for the handshake so we don't block indefinitely if the node doesn't respond.
+    setTimeout(SO_RCVTIMEO, /*milliseconds=*/2000);
+
     // Receive handshake - exchange peer packets
     receivePacketWithHeaderAs<ExchangePublicPeers>();
 

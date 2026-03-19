@@ -31,6 +31,8 @@ constexpr unsigned long pollTimeoutMilliSec = 200;
 constexpr unsigned int reconnectBaseDelaySec = 2;
 constexpr unsigned int reconnectMaxDelaySec = 60;
 
+using SteadyClock = std::chrono::steady_clock;
+
 // Process a single, already-framed packet (packetSize bytes starting at recvData).
 void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<DispatcherMiningSolution>& queue)
 {
@@ -127,33 +129,67 @@ static void buildPollList(std::vector<QubicConnection>& connections, std::vector
     }
 }
 
-// Try to reconnect a single connection with exponential backoff.
-// Returns true if reconnected, false if stop was requested before success.
-static bool tryReconnect(std::stop_token& st, QubicConnection& conn)
+// Per-connection reconnect state for non-blocking exponential backoff.
+struct ReconnectState
 {
     unsigned int delaySec = reconnectBaseDelaySec;
-    while (!st.stop_requested())
+    SteadyClock::time_point nextRetryTime = SteadyClock::time_point::min(); // min = no pending reconnect
+
+    void scheduleRetry()
     {
-        std::cout << "qubicReceiveLoop: Reconnecting to " << conn.getPeerIp() << ":" << conn.getPeerPort()
-            << " in " << delaySec << "s..." << std::endl;
+        nextRetryTime = SteadyClock::now() + std::chrono::seconds(delaySec);
+    }
 
-        // Sleep in small increments so we can respond to stop requests.
-        for (unsigned int elapsed = 0; elapsed < delaySec && !st.stop_requested(); ++elapsed)
-            std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        if (st.stop_requested())
-            return false;
-
-        if (conn.reconnect())
-        {
-            std::cout << "qubicReceiveLoop: Reconnected to " << conn.getPeerIp() << ":" << conn.getPeerPort() << "." << std::endl;
-            return true;
-        }
-
-        std::cerr << "qubicReceiveLoop: Reconnect failed for " << conn.getPeerIp() << ":" << conn.getPeerPort() << "." << std::endl;
+    void backoff()
+    {
         delaySec = (std::min)(delaySec * 2, reconnectMaxDelaySec);
     }
-    return false;
+
+    void reset()
+    {
+        delaySec = reconnectBaseDelaySec;
+        nextRetryTime = SteadyClock::time_point::min();
+    }
+
+    bool isPending() const { return nextRetryTime != SteadyClock::time_point::min(); }
+    bool isReady() const { return isPending() && SteadyClock::now() >= nextRetryTime; }
+};
+
+// Mark a connection as disconnected and schedule a reconnect attempt.
+static void markDisconnected(QubicConnection& conn, std::vector<char>& recvBuf, ReconnectState& rs, const char* reason)
+{
+    std::cerr << "qubicReceiveLoop: Connection to " << conn.getPeerIp() << " lost (" << reason << ")." << std::endl;
+    conn.closeConnection();
+    recvBuf.clear();
+    rs.scheduleRetry();
+    std::cout << "qubicReceiveLoop: Will reconnect to " << conn.getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
+}
+
+// Try pending reconnects (non-blocking: only attempts connections whose delay has elapsed).
+static bool tryPendingReconnects(std::vector<QubicConnection>& connections, std::vector<ReconnectState>& reconnectStates)
+{
+    bool anyReconnected = false;
+    for (size_t i = 0; i < connections.size(); ++i)
+    {
+        ReconnectState& rs = reconnectStates[i];
+        if (!rs.isReady())
+            continue;
+
+        if (connections[i].reconnect())
+        {
+            std::cout << "qubicReceiveLoop: Reconnected to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
+            rs.reset();
+            anyReconnected = true;
+        }
+        else
+        {
+            std::cerr << "qubicReceiveLoop: Reconnect failed for " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
+            rs.backoff();
+            rs.scheduleRetry();
+            std::cout << "qubicReceiveLoop: Will retry " << connections[i].getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
+        }
+    }
+    return anyReconnected;
 }
 
 void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSolution>& queue, std::vector<QubicConnection>& connections)
@@ -162,6 +198,7 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
 
     // Per-connection stream buffer for reassembling packets from the TCP byte stream.
     std::vector<std::vector<char>> recvBuffers(connections.size());
+    std::vector<ReconnectState> reconnectStates(connections.size());
 
     std::vector<pollfd_t> socketPollList;
     std::vector<size_t> pollToConnIdx; // maps poll list index -> connections index
@@ -169,17 +206,14 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
 
     while (!st.stop_requested())
     {
+        // Try any pending reconnects whose delay has elapsed (non-blocking).
+        if (tryPendingReconnects(connections, reconnectStates))
+            buildPollList(connections, socketPollList, pollToConnIdx);
+
         if (socketPollList.empty())
         {
-            // All connections are down. Try to reconnect each one.
-            for (auto& conn : connections)
-            {
-                if (!conn.isConnected())
-                    tryReconnect(st, conn);
-                if (st.stop_requested())
-                    return;
-            }
-            buildPollList(connections, socketPollList, pollToConnIdx);
+            // All connections are down. Sleep briefly to avoid busy-waiting.
+            std::this_thread::sleep_for(std::chrono::milliseconds(pollTimeoutMilliSec));
             continue;
         }
 
@@ -205,19 +239,14 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
                     }
                     else
                     {
-                        std::cerr << "qubicReceiveLoop: Connection to " << connections[connIdx].getPeerIp() << " lost (recv returned " << recvBytes << ")." << std::endl;
-                        connections[connIdx].closeConnection();
-                        recvBuffers[connIdx].clear();
-                        tryReconnect(st, connections[connIdx]);
+                        markDisconnected(connections[connIdx], recvBuffers[connIdx], reconnectStates[connIdx],
+                            (std::string("recv returned ") + std::to_string(recvBytes)).c_str());
                         needRebuild = true;
                     }
                 }
                 else if (pd.revents & (POLLERR | POLLHUP))
                 {
-                    std::cerr << "qubicReceiveLoop: Connection to " << connections[connIdx].getPeerIp() << " lost (POLLERR|POLLHUP)." << std::endl;
-                    connections[connIdx].closeConnection();
-                    recvBuffers[connIdx].clear();
-                    tryReconnect(st, connections[connIdx]);
+                    markDisconnected(connections[connIdx], recvBuffers[connIdx], reconnectStates[connIdx], "POLLERR|POLLHUP");
                     needRebuild = true;
                 }
             }
