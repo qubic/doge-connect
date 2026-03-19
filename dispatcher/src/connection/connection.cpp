@@ -135,10 +135,7 @@ std::string Connection::receiveResponse()
     std::string res = "";
 
     if (!m_socket.isConnected)
-    {
-        ERR() << "Socket is not connected, failed to receive" << std::endl;
         return res;
-    }
 
     int recvBytes = read(m_socket.rawSocket, m_buffer.data(), m_buffer.size());
     if (recvBytes > 0)
@@ -149,10 +146,7 @@ std::string Connection::receiveResponse()
 int Connection::receiveResponse(char* buffer, unsigned int size)
 {
     if (!m_socket.isConnected)
-    {
-        ERR() << "Socket is not connected, failed to receive" << std::endl;
         return -1;
-    }
 
     return read(m_socket.rawSocket, buffer, size);
 }
@@ -160,10 +154,7 @@ int Connection::receiveResponse(char* buffer, unsigned int size)
 bool Connection::receiveAllData(char* buffer, unsigned int size)
 {
     if (!m_socket.isConnected)
-    {
-        ERR() << "Socket is not connected, failed to receive" << std::endl;
         return false;
-    }
 
     int recvBytesTotal = 0;
     int recvBytes = 0;

@@ -45,7 +45,8 @@ T QubicConnection::receivePacketWithHeaderAs()
     return result;
 }
 
-// Receive the next qubic packet with a RequestResponseHeader that matches T
+// Receive the next qubic packet with a RequestResponseHeader that matches T.
+// Used during handshake where timeouts are expected, so errors are silent.
 template <typename T>
 void QubicConnection::receivePacketWithHeaderAs(T& result)
 {
@@ -58,25 +59,16 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
     {
         recvByte = receiveResponse(reinterpret_cast<char*>(&header), sizeof(RequestResponseHeader));
         if (recvByte != sizeof(RequestResponseHeader))
-        {
-            ERR() << "QubicConnection::receivePacketWithHeaderAs: No header received." << std::endl;
             return;
-        }
         if (header.type() == END_RESPONSE_TYPE)
-        {
-            ERR() << "QubicConnection::receivePacketWithHeaderAs: Unexpected EndResponse received." << std::endl;
             return;
-        }
         if (header.type() != T::type())
         {
             // Skip this packet and keep receiving.
             packetSize = header.size();
             remainingSize = packetSize - sizeof(RequestResponseHeader);
             if (!receiveAllData(m_buffer.data(), remainingSize))
-            {
-                ERR() << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
                 return;
-            }
             else
                 continue;
         }
@@ -90,10 +82,7 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
     {
         memset(m_buffer.data(), 0, sizeof(T));
         if (!receiveAllData(m_buffer.data(), remainingSize))
-        {
-            ERR() << "QubicConnection::receivePacketWithHeaderAs: Failed to receive all data." << std::endl;
             return;
-        }
         result = *(reinterpret_cast<T*>(m_buffer.data()));
     }
 
