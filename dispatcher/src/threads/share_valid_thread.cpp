@@ -58,8 +58,8 @@ void shareValidationLoop(
         }
 
         // Build complete header from task and solution info.
-        memcpy(fullHeader.data(), task.partialHeader1.data(), task.partialHeader1.size());
-        unsigned int offset = task.partialHeader1.size();
+        memcpy(fullHeader.data(), task.partialHeader.data(), task.partialHeader.size());
+        unsigned int offset = task.partialHeader.size();
         memcpy(fullHeader.data() + offset, sol.merkleRoot.data(), sol.merkleRoot.size());
         offset += sol.merkleRoot.size();
         memcpy(fullHeader.data() + offset, sol.nTime.data(), sol.nTime.size());

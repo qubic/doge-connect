@@ -69,8 +69,8 @@ void distributeTask(
         return;
     }
 
-    memcpy(dispatcherTask.partialHeader1.data(), version.data(), 4);
-    memcpy(dispatcherTask.partialHeader1.data() + 4, prevHash.data(), 32);
+    memcpy(dispatcherTask.partialHeader.data(), version.data(), 4);
+    memcpy(dispatcherTask.partialHeader.data() + 4, prevHash.data(), 32);
     memcpy(dispatcherTask.nBits.data(), nbits.data(), 4);
 
     dispatcherTask.targetPool = currentPoolDifficulty.getFullRep();
