@@ -53,7 +53,9 @@ struct QubicDogeMiningTask
 {
     uint8_t cleanJobQueue; // flag indicating whether previous jobs should be dropped
     std::array<uint8_t, 4> dispatcherDifficulty; // dispatcher difficulty, usually lower than pool and network difficulty, same compact format
-    unsigned int extraNonce2NumBytes; // first 10 bits in extraNonce2 need to be set to indicate computor id
+    
+    // The Dispatcher always expects a size of 8 bytes for the extraNonce2, 4 bytes for comp id, 4 bytes for miner to iterate.
+    static constexpr unsigned int extraNonce2NumBytes = 8;
 
     // Data for building the block header, the byte arrays are in the
     // correct order for copying into the header directly.
@@ -80,11 +82,10 @@ struct QubicDogeMiningTask
  */
 struct QubicDogeMiningSolution
 {
+    std::array<uint8_t, 4> nTime; // the miner's rolling timestamp, little endian (same byte order as used in the block header)
     std::array<uint8_t, 4> nonce; // little endian (same byte order as used in the block header)
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as used in the header
-    unsigned int extraNonce2NumBytes;
-
-    // Followed by extraNonce2 in the same byte order as it was used to create the merkle root
+    std::array<uint8_t, 8> extraNonce2; // same byte order as it was used to create the merkle root
 };
 ```
 
