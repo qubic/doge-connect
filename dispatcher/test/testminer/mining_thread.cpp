@@ -17,7 +17,7 @@
 
 #include "mining_structs.h"
 
-constexpr unsigned int computorId = 337;
+constexpr uint32_t computorId = 337;
 
 
 void miningLoop(
@@ -32,8 +32,8 @@ void miningLoop(
     std::array<uint8_t, 80> header;
     std::array<uint8_t, 32> merkleRoot;
     std::array<uint8_t, 32> scryptHash;
-    constexpr unsigned int minBufferSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
-    std::vector<uint8_t> solutionBuffer(minBufferSize + 8);
+    constexpr unsigned int totalNumBytes = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
+    std::vector<uint8_t> solutionBuffer(totalNumBytes);
 
     while (!st.stop_requested())
     {
@@ -41,34 +41,22 @@ void miningLoop(
         InternalMiningTask task = activeTasks.pop(); // blocks until data is available
         startNewJob = false;
 
-        if (task.extraNonce2NumBytes > 8)
-        {
-            std::cerr << "miningLoop can currently only handle up to 8 bytes for extraNonce2." << std::endl;
-            continue;
-        }
-
         // Full header can be constructed via concatenating partialHeader1 + merkleRoot + partialHeader2 + nonce.
         memcpy(header.data(), task.partialHeader1.data(), task.partialHeader1.size());
         memcpy(header.data() + task.partialHeader1.size() + merkleRoot.size(), task.partialHeader2.data(), task.partialHeader2.size());
 
-        unsigned int totalNumBytes = minBufferSize + task.extraNonce2NumBytes; // includes SIGNATURE_SIZE
-        if (solutionBuffer.size() < totalNumBytes)
-            solutionBuffer.resize(totalNumBytes);
+        // First 4 bytes in extraNonce2 need to be set to indicate computor id.
+        uint32_t extraNonce2High = computorId;
+        std::array<uint8_t, 8> extraNonce2;
+        // TODO: verify format for copying extraNonce2, currently using big endian
+        for (unsigned int b = 0; b < 4; ++b)
+            extraNonce2[b] = (extraNonce2High >> ((3-b) * 8)) & 0xFF;
 
-        // First 10 bits in extraNonce2 need to be set to indicate computor id.
-        unsigned int extraNonce2EffectiveNumBits = task.extraNonce2NumBytes * 8 - 10;
-        uint64_t extraNonce2CompMask = computorId;
-        extraNonce2CompMask <<= extraNonce2EffectiveNumBits;
-        uint64_t extraNonce2Max = (1ULL << extraNonce2EffectiveNumBits) - 1; // extraNonce2EffectiveNumBits trailing 1s
+        uint32_t* extraNonce2LowPtr = reinterpret_cast<uint32_t*>(extraNonce2.data() + 4);
 
-        std::vector<uint8_t> extraNonce2Vec(task.extraNonce2NumBytes);
-        for (uint64_t extraNonce2Counter = 0; extraNonce2Counter <= extraNonce2Max; ++extraNonce2Counter)
+        for (*extraNonce2LowPtr = 0; *extraNonce2LowPtr <= (std::numeric_limits<uint32_t>::max)(); ++(*extraNonce2LowPtr))
         {
-            uint64_t extraNonce2 = extraNonce2CompMask | extraNonce2Counter;
-            for (unsigned int b = 0; b < extraNonce2Vec.size(); ++b)
-                extraNonce2Vec[extraNonce2Vec.size() - 1 - b] = (extraNonce2 >> (b * 8)) & 0xFF;
-
-            merkleRoot = calculateMerkleRoot(task.coinbase1, task.coinbase2, task.extraNonce1, extraNonce2Vec, task.merkleBranches);
+            merkleRoot = calculateMerkleRoot(task.coinbase1, task.coinbase2, task.extraNonce1, extraNonce2, task.merkleBranches);
 
             memcpy(header.data() + task.partialHeader1.size(), merkleRoot.data(), merkleRoot.size());
 
@@ -92,7 +80,7 @@ void miningLoop(
                     if (passedTarget)
                     {
                         ++solutionsFound;
-                        std::cout << "miningLoop: Found a share that passes dispatcher difficulty." << std::endl;
+                        std::cout << "miningLoop: Found a share that PASSES dispatcher difficulty." << std::endl;
                     }
                     else
                         std::cout << "miningLoop: Sending a wrong share for testing." << std::endl;
@@ -107,16 +95,14 @@ void miningLoop(
                     memcpy(qubicSol->sourcePublicKey.data(), signingCtx.publicKey.data(), 32);
                     qubicSol->jobId = task.jobId;
                     qubicSol->customMiningType = CustomMiningType::DOGE;
-
                     offset += sizeof(CustomQubicMiningSolution);
+
                     QubicDogeMiningSolution* dogeSol = reinterpret_cast<QubicDogeMiningSolution*>(solutionBuffer.data() + offset);
                     memcpy(dogeSol->nTime.data(), header.data() + 68, 4);
                     memcpy(dogeSol->nonce.data(), header.data() + 76, 4);
                     memcpy(dogeSol->merkleRoot.data(), merkleRoot.data(), merkleRoot.size());
-                    dogeSol->extraNonce2NumBytes = extraNonce2Vec.size();
+                    memcpy(dogeSol->extraNonce2.data(), extraNonce2.data(), extraNonce2.size());
                     offset += sizeof(QubicDogeMiningSolution);
-                    memcpy(solutionBuffer.data() + offset, extraNonce2Vec.data(), extraNonce2Vec.size());
-                    offset += extraNonce2Vec.size();
 
                     // Sign everything after the header (before the signature).
                     const uint8_t* signDataStart = solutionBuffer.data() + sizeof(RequestResponseHeader);

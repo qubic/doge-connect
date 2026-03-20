@@ -17,11 +17,13 @@ struct InternalMiningTask
     std::array<uint8_t, 36> partialHeader1; // 4 bytes version, 32 bytes prevBlockHash
     std::array<uint8_t, 8> partialHeader2; // 4 bytes timestamp (nTime), 4 bytes network difficulty (nBits)
 
-    unsigned int extraNonce2NumBytes; // first 10 bits in extraNonce2 need to be set to indicate computor id
     // Note: extraNonce1, coinbase1/2, and merkle branches have the same byte order as sent via stratum,
     // which should be correct for constructing the merkle root.
     std::vector<uint8_t> extraNonce1;
     std::vector<uint8_t> coinbase1;
     std::vector<uint8_t> coinbase2;
     std::vector<std::vector<uint8_t>> merkleBranches;
+
+    // The Dispatcher always expects a size of 8 bytes for the extraNonce2, 4 bytes for comp id, 4 bytes for miner to iterate.
+    static constexpr unsigned int extraNonce2NumBytes = 8;
 };

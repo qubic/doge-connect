@@ -49,7 +49,7 @@ std::string bytesToHex(std::span<const uint8_t> bytes, ByteArrayFormat byteForma
     return ss.str();
 }
 
-std::array<uint8_t, 32> doubleSHA256(const std::vector<uint8_t>& data)
+std::array<uint8_t, 32> doubleSHA256(const std::span<uint8_t>& data)
 {
     SHA256_CTX ctx;
     std::array<uint8_t, 32> firstHash;
@@ -69,11 +69,11 @@ std::array<uint8_t, 32> doubleSHA256(const std::vector<uint8_t>& data)
 }
 
 std::array<uint8_t, 32> calculateMerkleRoot(
-    const std::vector<uint8_t>& coinbase1,
-    const std::vector<uint8_t>& coinbase2,
-    const std::vector<uint8_t>& extraNonce1,
-    const std::vector<uint8_t>& extraNonce2,
-    const std::vector<std::vector<uint8_t>>& merkleBranches
+    const std::span<uint8_t>& coinbase1,
+    const std::span<uint8_t>& coinbase2,
+    const std::span<uint8_t>& extraNonce1,
+    const std::span<uint8_t>& extraNonce2,
+    const std::span<std::vector<uint8_t>>& merkleBranches
 )
 {
     // Build the coinbase transaction by concatenation.

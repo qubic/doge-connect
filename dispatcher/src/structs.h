@@ -51,7 +51,9 @@ struct QubicDogeMiningTask
 {
     uint8_t cleanJobQueue; // flag indicating whether previous jobs should be dropped
     std::array<uint8_t, 4> dispatcherDifficulty; // dispatcher difficulty, usually lower than pool and network difficulty, same compact format
-    unsigned int extraNonce2NumBytes; // most significant 4 bytes in extraNonce2 need to be set to indicate computor id
+    
+    // The Dispatcher always expects a size of 8 bytes for the extraNonce2, 4 bytes for comp id, 4 bytes for miner to iterate.
+    static constexpr unsigned int extraNonce2NumBytes = 8;
 
     // Data for building the block header, the byte arrays are in the
     // correct order for copying into the header directly.
@@ -100,9 +102,7 @@ struct QubicDogeMiningSolution
     std::array<uint8_t, 4> nTime; // the miner's rolling timestamp, little endian (same byte order as used in the block header)
     std::array<uint8_t, 4> nonce; // little endian (same byte order as used in the block header)
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as used in the header
-    unsigned int extraNonce2NumBytes;
-
-    // Followed by extraNonce2 in the same byte order as it was used to create the merkle root
+    std::array<uint8_t, 8> extraNonce2; // same byte order as it was used to create the merkle root
 };
 
 /**
@@ -119,13 +119,15 @@ struct DispatcherMiningTask
     std::array<uint8_t, 36> partialHeader1; // 4 bytes version, 32 bytes prevBlockHash
     std::array<uint8_t, 4> nBits; // 4 bytes network difficulty (nBits)
 
-    unsigned int extraNonce2NumBytes;
     // Note: extraNonce1, coinbase1/2, and merkle branches have the same byte order as sent via stratum,
     // which should be correct for constructing the merkle root.
     std::vector<uint8_t> extraNonce1;
     std::vector<uint8_t> coinbase1;
     std::vector<uint8_t> coinbase2;
     std::vector<std::vector<uint8_t>> merkleBranches;
+
+    // The Dispatcher always expects a size of 8 bytes for the extraNonce2, 4 bytes for comp id, 4 bytes for miner to iterate.
+    static constexpr unsigned int extraNonce2NumBytes = 8;
 };
 
 /**
@@ -137,7 +139,7 @@ struct DispatcherMiningSolution
     std::array<uint8_t, 4> nTime; // the miner's rolling timestamp, little endian
     std::array<uint8_t, 4> nonce; // little endian
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as it appears in the header
-    std::vector<uint8_t> extraNonce2; // same byte order as it was used to create the merkle root
+    std::array<uint8_t, 8> extraNonce2; // same byte order as it was used to create the merkle root
 };
 
 // ----- Structs for the Qubic connection -----

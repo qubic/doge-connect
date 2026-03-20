@@ -121,9 +121,8 @@ int main(int argc, char* argv[])
     ConcurrentHashMap<uint64_t, DispatcherMiningTask> activeTasks;
 
     std::vector<uint8_t> extraNonce1;
-    std::atomic<unsigned int> extraNonce2NumBytes;
 
-    if (!initStratumProtocol(stratumConnection, recvStratumMessages, extraNonce1, extraNonce2NumBytes,
+    if (!initStratumProtocol(stratumConnection, recvStratumMessages, extraNonce1,
             config.pool.workerName, config.pool.workerPassword))
         return 1;
 
@@ -143,10 +142,10 @@ int main(int argc, char* argv[])
     std::jthread inputThread(inputThreadLoop, std::ref(keepRunning));
     // Start the stratumRecvThread to receive messages from the mining pool via stratum TCP.
     std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection),
-        std::ref(config.pool), std::ref(extraNonce1), std::ref(extraNonce2NumBytes));
+        std::ref(config.pool), std::ref(extraNonce1));
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(extraNonce2NumBytes), std::ref(signingCtx), std::ref(stats));
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.

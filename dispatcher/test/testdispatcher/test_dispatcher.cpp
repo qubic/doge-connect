@@ -108,7 +108,6 @@ int main(int argc, char* argv[])
     ConcurrentHashMap<uint64_t, DispatcherMiningTask> activeTasks;
 
     std::vector<uint8_t> extraNonce1 = hexToBytes("6cde77a1", ByteArrayFormat::BigEndian);
-    std::atomic<unsigned int> extraNonce2NumBytes = 8;
 
     std::atomic<bool> keepRunning = true; // Atomic flag to signal the rest of the app to stop.
 
@@ -130,7 +129,7 @@ int main(int argc, char* argv[])
     std::jthread stratumRecvThread(dummyStratumReceiveLoop, std::ref(recvStratumMessages), config.testDispatcher.timeBetweenJobsSec, config.testDispatcher.frequencyClearJobs);
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(extraNonce2NumBytes), std::ref(signingCtx), std::ref(stats));
+        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions. The test dispatcher does not submit to a pool, so fill data with dummies.

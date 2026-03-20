@@ -20,7 +20,6 @@ bool initStratumProtocol(
     Connection& connection,
     ConcurrentQueue<nlohmann::json>& recvStratumMessages,
     std::vector<uint8_t>& extraNonce1,
-    std::atomic<unsigned int>& extraNonce2NumBytes,
     const std::string& workerName,
     const std::string& workerPassword
 )
@@ -40,7 +39,12 @@ bool initStratumProtocol(
         // TODO: save subscription IDs sent in index 0 to reconnect if the TCP connection is dropped.
         std::string extraNonce1String = result[1];
         extraNonce1 = hexToBytes(extraNonce1String, ByteArrayFormat::BigEndian);
-        extraNonce2NumBytes = result[2];
+        unsigned int extraNonce2NumBytes = result[2];
+        if (extraNonce2NumBytes != 8)
+        {
+            ERR() << "Qubic Doge Dispatcher only accepts 8 bytes as extraNonce2 size.";
+            return false;
+        }
         LOG() << "Received extraNonce1 " << extraNonce1String << ", size of extraNonce2 in bytes: " << extraNonce2NumBytes << std::endl;
     }
     else
@@ -91,8 +95,7 @@ void stratumReceiveLoop(
     ConcurrentQueue<nlohmann::json>& queue,
     Connection& connection,
     const PoolConfig& poolConfig,
-    std::vector<uint8_t>& extraNonce1,
-    std::atomic<unsigned int>& extraNonce2NumBytes
+    std::vector<uint8_t>& extraNonce1
 )
 {
     std::string networkBuffer;
@@ -121,8 +124,7 @@ void stratumReceiveLoop(
 
                 if (connection.openConnection(poolConfig.url, poolConfig.stratumPort))
                 {
-                    if (initStratumProtocol(connection, queue, extraNonce1, extraNonce2NumBytes,
-                            poolConfig.workerName, poolConfig.workerPassword))
+                    if (initStratumProtocol(connection, queue, extraNonce1, poolConfig.workerName, poolConfig.workerPassword))
                     {
                         LOG() << "stratumReceiveLoop: Reconnected to pool." << std::endl;
                         break;

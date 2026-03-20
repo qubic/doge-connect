@@ -38,8 +38,8 @@ using SteadyClock = std::chrono::steady_clock;
 // Process a single, already-framed packet (packetSize bytes starting at recvData).
 void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<DispatcherMiningSolution>& queue)
 {
-    unsigned int requiredMinSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
-    if (packetSize < requiredMinSize)
+    unsigned int requiredSize = sizeof(RequestResponseHeader) + sizeof(CustomQubicMiningSolution) + sizeof(QubicDogeMiningSolution) + SIGNATURE_SIZE;
+    if (packetSize != requiredSize)
         return;
 
     RequestResponseHeader* header = reinterpret_cast<RequestResponseHeader*>(recvData);
@@ -50,12 +50,6 @@ void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<Di
     uint64_t offset = sizeof(RequestResponseHeader);
     CustomQubicMiningSolution* qubicSol = reinterpret_cast<CustomQubicMiningSolution*>(recvData + offset);
     if (qubicSol->customMiningType != CustomMiningType::DOGE)
-        return;
-
-    // Parse QubicDogeMiningSolution struct and create DispatcherMiningSolution from it.
-    offset += sizeof(CustomQubicMiningSolution);
-    QubicDogeMiningSolution* dogeSol = reinterpret_cast<QubicDogeMiningSolution*>(recvData + offset);
-    if (requiredMinSize + dogeSol->extraNonce2NumBytes != packetSize)
         return;
 
     // Verify signature: covers everything after the header, before the trailing 64-byte signature.
@@ -69,15 +63,18 @@ void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<Di
         return;
     }
 
+    // Parse QubicDogeMiningSolution struct and create DispatcherMiningSolution from it.
+    offset += sizeof(CustomQubicMiningSolution);
+    QubicDogeMiningSolution* dogeSol = reinterpret_cast<QubicDogeMiningSolution*>(recvData + offset);
+
     DispatcherMiningSolution dispSol =
     {
         .jobId = qubicSol->jobId,
         .nTime = dogeSol->nTime,
         .nonce = dogeSol->nonce,
-        .merkleRoot = dogeSol->merkleRoot
+        .merkleRoot = dogeSol->merkleRoot,
+        .extraNonce2 = dogeSol->extraNonce2,
     };
-    offset += sizeof(QubicDogeMiningSolution);
-    dispSol.extraNonce2 = std::vector<uint8_t>(recvData + offset, recvData + offset + dogeSol->extraNonce2NumBytes);
 
     queue.push(std::move(dispSol));
 }

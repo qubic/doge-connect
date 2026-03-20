@@ -46,7 +46,6 @@ void taskReceiveLoop(std::stop_token st, ConcurrentQueue<InternalMiningTask>& ac
         task.jobId = qubicTask->jobId;
         task.targetDispatcher = calculateFullRepFromCompactRep(dogeTask->dispatcherDifficulty);
 
-        task.extraNonce2NumBytes = dogeTask->extraNonce2NumBytes;
         memcpy(task.partialHeader1.data(), dogeTask->version.data(), 4);
         memcpy(task.partialHeader1.data() + 4, dogeTask->prevHash.data(), 32);
         memcpy(task.partialHeader2.data(), dogeTask->nTime.data(), 4);

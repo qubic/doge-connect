@@ -26,7 +26,6 @@ void distributeTask(
     const DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
-    std::atomic<unsigned int>& extraNonce2NumBytes,
     bool propagateCleanJobFlag,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats
@@ -77,7 +76,6 @@ void distributeTask(
     dispatcherTask.targetPool = currentPoolDifficulty.getFullRep();
     dispatcherTask.targetDispatcher = dispatcherDifficulty.getFullRep();
 
-    dispatcherTask.extraNonce2NumBytes = extraNonce2NumBytes;
     dispatcherTask.coinbase1 = hexToBytes(params[2], ByteArrayFormat::BigEndian);
     dispatcherTask.coinbase2 = hexToBytes(params[3], ByteArrayFormat::BigEndian);
     dispatcherTask.extraNonce1 = extraNonce1;
@@ -120,7 +118,6 @@ void distributeTask(
     QubicDogeMiningTask* dogeTask = reinterpret_cast<QubicDogeMiningTask*>(buffer.data() + offset);
     dogeTask->cleanJobQueue = cleanJobQueue;
     dogeTask->dispatcherDifficulty = dispatcherDifficulty.getCompactRep();
-    dogeTask->extraNonce2NumBytes = extraNonce2NumBytes;
 
     memcpy(dogeTask->version.data(), version.data(), 4);
     memcpy(dogeTask->nTime.data(), ntime.data(), 4);
@@ -222,7 +219,6 @@ void taskDistributionLoop(
     DifficultyTarget& currentPoolDifficulty,
     const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
-    std::atomic<unsigned int>& extraNonce2NumBytes,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats
 )
@@ -278,7 +274,7 @@ void taskDistributionLoop(
                     LOG() << "Skipped " << skipped << " queued job(s), distributing latest only." << std::endl;
 
                 distributeTask(std::move(latestNotify), activeTasks, connections, currentPoolDifficulty,
-                    dispatcherDifficulty, extraNonce1, extraNonce2NumBytes, cleanJobQueue, signingCtx, stats);
+                    dispatcherDifficulty, extraNonce1, cleanJobQueue, signingCtx, stats);
             }
         }
         else if (msg["id"].is_number_unsigned())

@@ -37,7 +37,7 @@ std::string bytesToHex(std::span<const uint8_t> bytes, ByteArrayFormat byteForma
  * @param data The input data for the first hash.
  * @return The result of applying the hash function to the data twice, i.e. hash(hash(data)).
  */
-std::array<uint8_t, 32> doubleSHA256(const std::vector<uint8_t>& data);
+std::array<uint8_t, 32> doubleSHA256(const std::span<uint8_t>& data);
 
 /**
  * @brief Calculate the merkle root by constructing the coinbase transaction and iteratively hashing it with the merkle branches.
@@ -49,11 +49,11 @@ std::array<uint8_t, 32> doubleSHA256(const std::vector<uint8_t>& data);
  * @return The root of the full merkle tree.
  */
 std::array<uint8_t, 32> calculateMerkleRoot(
-    const std::vector<uint8_t>& coinbase1,
-    const std::vector<uint8_t>& coinbase2,
-    const std::vector<uint8_t>& extraNonce1,
-    const std::vector<uint8_t>& extraNonce2,
-    const std::vector<std::vector<uint8_t>>& merkleBranches
+    const std::span<uint8_t>& coinbase1,
+    const std::span<uint8_t>& coinbase2,
+    const std::span<uint8_t>& extraNonce1,
+    const std::span<uint8_t>& extraNonce2,
+    const std::span<std::vector<uint8_t>>& merkleBranches
 );
 
 /**
