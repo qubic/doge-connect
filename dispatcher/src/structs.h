@@ -51,7 +51,7 @@ struct QubicDogeMiningTask
 {
     uint8_t cleanJobQueue; // flag indicating whether previous jobs should be dropped
     std::array<uint8_t, 4> dispatcherDifficulty; // dispatcher difficulty, usually lower than pool and network difficulty, same compact format
-    unsigned int extraNonce2NumBytes; // first 10 bits in extraNonce2 need to be set to indicate computor id
+    unsigned int extraNonce2NumBytes; // most significant 4 bytes in extraNonce2 need to be set to indicate computor id
 
     // Data for building the block header, the byte arrays are in the
     // correct order for copying into the header directly.
@@ -97,6 +97,7 @@ struct CustomQubicMiningSolution
  */
 struct QubicDogeMiningSolution
 {
+    std::array<uint8_t, 4> nTime; // the miner's rolling timestamp, little endian (same byte order as used in the block header)
     std::array<uint8_t, 4> nonce; // little endian (same byte order as used in the block header)
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as used in the header
     unsigned int extraNonce2NumBytes;
@@ -110,14 +111,13 @@ struct QubicDogeMiningSolution
 struct DispatcherMiningTask
 {
     std::string taskId; // the pool's taskId
-    std::string nTimeHex; // the timestamp as hex string (as received from the pool), needed for submitting solutions
 
     std::array<uint8_t, 32> targetPool; // current (i.e. when receiving the task) pool difficulty target converted to a 256-bit number (little endian)
     std::array<uint8_t, 32> targetDispatcher; // dispatcher difficulty target converted to a 256-bit number (little endian)
 
-    // Full header can be constructed via concatenating partialHeader1 + merkleRoot + partialHeader2 + nonce.
+    // Full header can be constructed via concatenating partialHeader1 + merkleRoot + miner's nTime + nBits + miner's nonce.
     std::array<uint8_t, 36> partialHeader1; // 4 bytes version, 32 bytes prevBlockHash
-    std::array<uint8_t, 8> partialHeader2; // 4 bytes timestamp (nTime), 4 bytes network difficulty (nBits)
+    std::array<uint8_t, 4> nBits; // 4 bytes network difficulty (nBits)
 
     unsigned int extraNonce2NumBytes;
     // Note: extraNonce1, coinbase1/2, and merkle branches have the same byte order as sent via stratum,
@@ -134,6 +134,7 @@ struct DispatcherMiningTask
 struct DispatcherMiningSolution
 {
     uint64_t jobId; // millisecond timestamp as dispatcher job id
+    std::array<uint8_t, 4> nTime; // the miner's rolling timestamp, little endian
     std::array<uint8_t, 4> nonce; // little endian
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as it appears in the header
     std::vector<uint8_t> extraNonce2; // same byte order as it was used to create the merkle root

@@ -53,7 +53,6 @@ void distributeTask(
     // Build DispatcherMiningTask
     DispatcherMiningTask dispatcherTask;
     dispatcherTask.taskId = params[0];
-    dispatcherTask.nTimeHex = params[7];
 
     std::vector<uint8_t> version = hexToBytes(params[5], ByteArrayFormat::LittleEndian);
     std::vector<uint8_t> prevHash = hexToBytes(params[1], ByteArrayFormat::LittleEndian);
@@ -73,8 +72,7 @@ void distributeTask(
 
     memcpy(dispatcherTask.partialHeader1.data(), version.data(), 4);
     memcpy(dispatcherTask.partialHeader1.data() + 4, prevHash.data(), 32);
-    memcpy(dispatcherTask.partialHeader2.data(), ntime.data(), 4);
-    memcpy(dispatcherTask.partialHeader2.data() + 4, nbits.data(), 4);
+    memcpy(dispatcherTask.nBits.data(), nbits.data(), 4);
 
     dispatcherTask.targetPool = currentPoolDifficulty.getFullRep();
     dispatcherTask.targetDispatcher = dispatcherDifficulty.getFullRep();

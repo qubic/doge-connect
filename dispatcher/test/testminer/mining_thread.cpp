@@ -110,6 +110,7 @@ void miningLoop(
 
                     offset += sizeof(CustomQubicMiningSolution);
                     QubicDogeMiningSolution* dogeSol = reinterpret_cast<QubicDogeMiningSolution*>(solutionBuffer.data() + offset);
+                    memcpy(dogeSol->nTime.data(), header.data() + 68, 4);
                     memcpy(dogeSol->nonce.data(), header.data() + 76, 4);
                     memcpy(dogeSol->merkleRoot.data(), merkleRoot.data(), merkleRoot.size());
                     dogeSol->extraNonce2NumBytes = extraNonce2Vec.size();

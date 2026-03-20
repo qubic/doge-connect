@@ -62,8 +62,10 @@ void shareValidationLoop(
         unsigned int offset = task.partialHeader1.size();
         memcpy(fullHeader.data() + offset, sol.merkleRoot.data(), sol.merkleRoot.size());
         offset += sol.merkleRoot.size();
-        memcpy(fullHeader.data() + offset, task.partialHeader2.data(), task.partialHeader2.size());
-        offset += task.partialHeader2.size();
+        memcpy(fullHeader.data() + offset, sol.nTime.data(), sol.nTime.size());
+        offset += sol.nTime.size();
+        memcpy(fullHeader.data() + offset, task.nBits.data(), task.nBits.size());
+        offset += task.nBits.size();
         memcpy(fullHeader.data() + offset, sol.nonce.data(), sol.nonce.size());
         offset += sol.nonce.size();
 
@@ -101,7 +103,7 @@ void shareValidationLoop(
                     workerName,
                     task.taskId,
                     bytesToHex(sol.extraNonce2, ByteArrayFormat::BigEndian),
-                    task.nTimeHex,
+                    bytesToHex(sol.nTime, ByteArrayFormat::LittleEndian),
                     bytesToHex(sol.nonce, ByteArrayFormat::LittleEndian)
                 };
 

@@ -72,6 +72,7 @@ void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<Di
     DispatcherMiningSolution dispSol =
     {
         .jobId = qubicSol->jobId,
+        .nTime = dogeSol->nTime,
         .nonce = dogeSol->nonce,
         .merkleRoot = dogeSol->merkleRoot
     };
