@@ -11,17 +11,26 @@
 #include <Winsock2.h>
 #include <Ws2tcpip.h>
 #define read(x, y, z) recv(x, y, z, 0) // make sure this goes after <iostream>
+#define poll WSAPoll
 #define INVALID_SKT INVALID_SOCKET
 #define GET_SOCKET_ERR WSAGetLastError()
+#define CONNECT_IN_PROGRESS (WSAGetLastError() == WSAEWOULDBLOCK)
+typedef WSAPOLLFD pollfd_t;
 #else
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <poll.h>
+#include <fcntl.h>
 #define closesocket close
 #define INVALID_SKT -1
 #define GET_SOCKET_ERR errno
+#define CONNECT_IN_PROGRESS (errno == EINPROGRESS)
+typedef struct pollfd pollfd_t;
 #endif
+
+constexpr int connectTimeoutMs = 5000;
 
 #include "structs.h"
 
@@ -171,16 +180,59 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
         return false;
     }
 
+    // Set socket to non-blocking for connect with timeout.
 #ifdef _MSC_VER
-    if (connect(m_socket.rawSocket, (const sockaddr*)&addr, sizeof(addr)) == SOCKET_ERROR)
+    unsigned long nonBlocking = 1;
+    ioctlsocket(m_socket.rawSocket, FIONBIO, &nonBlocking);
 #else
-    if (connect(m_socket.rawSocket, (const sockaddr*)&addr, sizeof(addr)) < 0)
+    int flags = fcntl(m_socket.rawSocket, F_GETFL, 0);
+    fcntl(m_socket.rawSocket, F_SETFL, flags | O_NONBLOCK);
 #endif
+
+    int connectResult = connect(m_socket.rawSocket, (const sockaddr*)&addr, sizeof(addr));
+
+    if (connectResult < 0 && !CONNECT_IN_PROGRESS)
     {
         ERR() << "Connection failed for IP " << ip << " on port " << port << ": " << GET_SOCKET_ERR << std::endl;
         m_socket.reset();
         return false;
     }
+
+    if (connectResult != 0)
+    {
+        // Wait for connect to complete with timeout.
+        pollfd_t pfd;
+        pfd.fd = m_socket.rawSocket;
+        pfd.events = POLLOUT;
+        pfd.revents = 0;
+        int pollResult = poll(&pfd, 1, connectTimeoutMs);
+
+        if (pollResult <= 0 || !(pfd.revents & POLLOUT))
+        {
+            ERR() << "Connection timed out for IP " << ip << " on port " << port << std::endl;
+            m_socket.reset();
+            return false;
+        }
+
+        // Check for connect error via SO_ERROR.
+        int sockErr = 0;
+        socklen_t errLen = sizeof(sockErr);
+        getsockopt(m_socket.rawSocket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&sockErr), &errLen);
+        if (sockErr != 0)
+        {
+            ERR() << "Connection failed for IP " << ip << " on port " << port << ": " << sockErr << std::endl;
+            m_socket.reset();
+            return false;
+        }
+    }
+
+    // Set socket back to blocking.
+#ifdef _MSC_VER
+    nonBlocking = 0;
+    ioctlsocket(m_socket.rawSocket, FIONBIO, &nonBlocking);
+#else
+    fcntl(m_socket.rawSocket, F_SETFL, flags);
+#endif
 
     m_socket.isConnected = true;
 

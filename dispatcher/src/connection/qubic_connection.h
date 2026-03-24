@@ -12,6 +12,27 @@ class QubicConnection : public Connection
 public:
     QubicConnection() {}
     QubicConnection(Socket&& socket) : Connection(std::move(socket)) {}
+
+    // Move constructor/assignment: transfer peer info along with the socket.
+    QubicConnection(QubicConnection&& other) noexcept
+        : Connection(std::move(other))
+        , m_peerIp(std::move(other.m_peerIp))
+        , m_peerPort(other.m_peerPort)
+    {
+        other.m_peerPort = 0;
+    }
+
+    QubicConnection& operator=(QubicConnection&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Connection::operator=(std::move(other));
+            m_peerIp = std::move(other.m_peerIp);
+            m_peerPort = other.m_peerPort;
+            other.m_peerPort = 0;
+        }
+        return *this;
+    }
     /**
      * @brief Open a connection to a Qubic node using the Qubic handshake (ExchangePublicPeers).
      * @param ip The node IP address.

@@ -83,6 +83,13 @@ public:
     Connection() {}
     Connection(Socket&& socket) : m_socket(std::move(socket)) { }
 
+    Connection(Connection&& other) noexcept = default;
+    Connection& operator=(Connection&& other) noexcept = default;
+
+    // No copy (Socket is non-copyable).
+    Connection(const Connection&) = delete;
+    Connection& operator=(const Connection&) = delete;
+
     /**
      * @brief Send a message via the connection.
      * @param msg The message to send.
