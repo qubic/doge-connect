@@ -98,22 +98,25 @@ int main(int argc, char* argv[])
     else
         LOG() << "Stratum connection successfully opened." << std::endl;
 
-    std::vector<QubicConnection> qubicConnections;
-    for (int i = 0; i < config.qubic.ips.size(); ++i)
+    // Connect to all qubic peers in parallel so fast ones are ready immediately.
+    std::vector<QubicConnection> qubicConnections(config.qubic.ips.size());
     {
-        QubicConnection qc;
-        if (!qc.openQubicConnection(config.qubic.ips[i], config.qubic.port))
-            ERR() << "Qubic connection could not be opened to IP " << config.qubic.ips[i] << std::endl;
-        else
-            qubicConnections.push_back(std::move(qc));
+        std::vector<std::thread> connectThreads;
+        for (size_t i = 0; i < config.qubic.ips.size(); ++i)
+        {
+            qubicConnections[i].setPeer(config.qubic.ips[i], config.qubic.port);
+            connectThreads.emplace_back([&conn = qubicConnections[i]]() {
+                conn.reconnect();
+            });
+        }
+        for (auto& t : connectThreads)
+            t.join();
+
+        unsigned int connected = 0;
+        for (const auto& qc : qubicConnections)
+            if (qc.isConnected()) connected++;
+        LOG() << "Qubic peers: " << connected << "/" << config.qubic.ips.size() << " connected, rest will retry in background." << std::endl;
     }
-    if (qubicConnections.empty())
-    {
-        ERR() << "No Qubic connection was opened successfully (out of " << config.qubic.ips.size() << " provided IPs)." << std::endl;
-        return 1;
-    }
-    else
-        LOG() << "Qubic connections opened successfully: " << qubicConnections.size() << "/" << config.qubic.ips.size() << " IPs." << std::endl;
 
     // Create a queue for received stratum messages.
     ConcurrentQueue<nlohmann::json> recvStratumMessages;

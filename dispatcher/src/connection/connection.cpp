@@ -14,6 +14,7 @@
 #define read(x, y, z) recv(x, y, z, 0) // make sure this goes after <iostream>
 #define INVALID_SKT INVALID_SOCKET
 #define GET_SOCKET_ERR WSAGetLastError()
+#define SEND_FLAGS 0
 #else
 #include <sys/socket.h>
 #include <netdb.h>
@@ -22,6 +23,7 @@
 #define INVALID_SKT -1
 #define GET_SOCKET_ERR errno
 #define SOCKET_ERROR -1
+#define SEND_FLAGS MSG_NOSIGNAL
 #endif
 
 
@@ -97,7 +99,7 @@ bool Connection::sendMessage(const std::string& msg)
     size_t totalSent = 0;
     while (totalSent < msg.size())
     {
-        int sent = send(m_socket.rawSocket, msg.c_str() + totalSent, msg.size() - totalSent, 0);
+        int sent = send(m_socket.rawSocket, msg.c_str() + totalSent, msg.size() - totalSent, SEND_FLAGS);
         if (sent == -1)
         {
             m_socket.isConnected = false;
@@ -119,7 +121,7 @@ bool Connection::sendMessage(char* buffer, unsigned int size)
     size_t totalSent = 0;
     while (totalSent < size)
     {
-        int sent = send(m_socket.rawSocket, buffer + totalSent, size - totalSent, 0);
+        int sent = send(m_socket.rawSocket, buffer + totalSent, size - totalSent, SEND_FLAGS);
         if (sent == -1)
         {
             m_socket.isConnected = false;

@@ -73,13 +73,19 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
             return;
         if (header.type() != T::type())
         {
-            // Skip this packet and keep receiving.
+            // Skip this packet by draining its bytes in chunks.
+            // Some packets (e.g. computor list) are larger than m_buffer, so we must not
+            // read the entire packet at once to avoid overflowing m_buffer.
             packetSize = header.size();
             remainingSize = packetSize - sizeof(RequestResponseHeader);
-            if (!receiveAllData(m_buffer.data(), remainingSize))
-                return;
-            else
-                continue;
+            while (remainingSize > 0)
+            {
+                int chunkSize = (remainingSize < static_cast<int>(m_buffer.size())) ? remainingSize : static_cast<int>(m_buffer.size());
+                if (!receiveAllData(m_buffer.data(), chunkSize))
+                    return;
+                remainingSize -= chunkSize;
+            }
+            continue;
         }
         break;
     }
@@ -89,6 +95,8 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
 
     if (remainingSize)
     {
+        if (remainingSize > static_cast<int>(m_buffer.size()))
+            return; // Packet too large for expected type T.
         memset(m_buffer.data(), 0, sizeof(T));
         if (!receiveAllData(m_buffer.data(), remainingSize))
             return;
@@ -193,7 +201,6 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
 
     if (connectResult < 0 && !CONNECT_IN_PROGRESS)
     {
-        ERR() << "Connection failed for IP " << ip << " on port " << port << ": " << GET_SOCKET_ERR << std::endl;
         m_socket.reset();
         return false;
     }
@@ -209,7 +216,6 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
 
         if (pollResult <= 0 || !(pfd.revents & POLLOUT))
         {
-            ERR() << "Connection timed out for IP " << ip << " on port " << port << std::endl;
             m_socket.reset();
             return false;
         }
@@ -220,7 +226,6 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
         getsockopt(m_socket.rawSocket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&sockErr), &errLen);
         if (sockErr != 0)
         {
-            ERR() << "Connection failed for IP " << ip << " on port " << port << ": " << sockErr << std::endl;
             m_socket.reset();
             return false;
         }

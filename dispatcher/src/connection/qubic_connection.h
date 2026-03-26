@@ -47,6 +47,7 @@ public:
      */
     bool reconnect();
 
+    void setPeer(const std::string& ip, int port) { m_peerIp = ip; m_peerPort = port; }
     const std::string& getPeerIp() const { return m_peerIp; }
     int getPeerPort() const { return m_peerPort; }
     

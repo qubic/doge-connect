@@ -142,7 +142,7 @@ struct ReconnectState
 
     void backoff()
     {
-        delaySec = (std::min)(delaySec * 2, reconnectMaxDelaySec);
+        delaySec = (delaySec < reconnectBaseDelaySec) ? reconnectBaseDelaySec : (std::min)(delaySec * 2, reconnectMaxDelaySec);
     }
 
     void reset()
@@ -183,10 +183,10 @@ static bool tryPendingReconnects(std::vector<QubicConnection>& connections, std:
         }
         else
         {
-            ERR() << "qubicReceiveLoop: Reconnect failed for " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
             rs.backoff();
             rs.scheduleRetry();
-            LOG() << "qubicReceiveLoop: Will retry " << connections[i].getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
+            LOG() << "qubicReceiveLoop: Connect to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort()
+                << " failed, retry in " << rs.delaySec << "s." << std::endl;
         }
     }
     return anyReconnected;
@@ -199,6 +199,16 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
     // Per-connection stream buffer for reassembling packets from the TCP byte stream.
     std::vector<std::vector<char>> recvBuffers(connections.size());
     std::vector<ReconnectState> reconnectStates(connections.size());
+
+    // Schedule immediate connect for any connections that aren't already connected.
+    for (size_t i = 0; i < connections.size(); ++i)
+    {
+        if (!connections[i].isConnected())
+        {
+            reconnectStates[i].delaySec = 0;
+            reconnectStates[i].scheduleRetry();
+        }
+    }
 
     std::vector<pollfd_t> socketPollList;
     std::vector<size_t> pollToConnIdx; // maps poll list index -> connections index
