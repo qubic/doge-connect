@@ -159,11 +159,16 @@ int main(int argc, char* argv[])
         // TODO: replace the sleep below with condition_variable::wait_for(...) with the time and keepRunning.
         std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
-        LOG() << "[status] tasks distributed: " << stats.tasksDistributed
-            << " | solutions recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
-            << " | pool shares: " << stats.solutionsPassedPoolDiff
+        unsigned int connectedPeers = 0;
+        for (const auto& qc : qubicConnections)
+            if (qc.isConnected()) connectedPeers++;
+
+        LOG() << "[status] net: " << connectedPeers << "/" << qubicConnections.size()
+            << " | tasks: " << stats.tasksDistributed
+            << " | sol recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
+            << " | pool: " << stats.solutionsPassedPoolDiff
             << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()
-            << " | active tasks: " << activeTasks.size() << std::endl;
+            << " | active: " << activeTasks.size() << std::endl;
 
         // TODO: handle connection error (threads will shut down on recv/send error and need to be restarted after connection is re-established)
     }
