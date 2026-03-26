@@ -30,7 +30,7 @@ typedef WSAPOLLFD pollfd_t;
 typedef struct pollfd pollfd_t;
 #endif
 
-constexpr int connectTimeoutMs = 5000;
+constexpr int connectTimeoutMs = 2000;
 
 #include "structs.h"
 
@@ -61,7 +61,9 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
 {
     memset(&result, 0, sizeof(T));
 
-    // First receive the header.
+    // First receive the header. Skip at most a few non-matching packets to bound handshake time.
+    constexpr int maxSkip = 3;
+    int skipped = 0;
     RequestResponseHeader header;
     int recvByte = -1, packetSize = -1, remainingSize = -1;
     while (true)
@@ -73,6 +75,8 @@ void QubicConnection::receivePacketWithHeaderAs(T& result)
             return;
         if (header.type() != T::type())
         {
+            if (++skipped > maxSkip)
+                return; // Too many non-matching packets, give up.
             // Skip this packet by draining its bytes in chunks.
             // Some packets (e.g. computor list) are larger than m_buffer, so we must not
             // read the entire packet at once to avoid overflowing m_buffer.
@@ -242,7 +246,7 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
     m_socket.isConnected = true;
 
     // Set a timeout for the handshake so we don't block indefinitely if the node doesn't respond.
-    setTimeout(SO_RCVTIMEO, /*milliseconds=*/2000);
+    setTimeout(SO_RCVTIMEO, /*milliseconds=*/1000);
 
     // Receive handshake - exchange peer packets
     receivePacketWithHeaderAs<ExchangePublicPeers>();

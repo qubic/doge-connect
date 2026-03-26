@@ -165,12 +165,16 @@ static void markDisconnected(QubicConnection& conn, std::vector<char>& recvBuf, 
     LOG() << "qubicReceiveLoop: Will reconnect to " << conn.getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
 }
 
-// Try pending reconnects (non-blocking: only attempts connections whose delay has elapsed).
-static bool tryPendingReconnects(std::vector<QubicConnection>& connections, std::vector<ReconnectState>& reconnectStates)
+// Try ONE pending reconnect per call (to avoid blocking the recv loop for too long).
+// Returns true if a connection was (re)established.
+static bool tryOneReconnect(std::vector<QubicConnection>& connections, std::vector<ReconnectState>& reconnectStates, size_t& nextReconnIdx)
 {
-    bool anyReconnected = false;
-    for (size_t i = 0; i < connections.size(); ++i)
+    // Scan from where we left off to find the next ready connection.
+    for (size_t scanned = 0; scanned < connections.size(); ++scanned)
     {
+        size_t i = nextReconnIdx % connections.size();
+        nextReconnIdx = (nextReconnIdx + 1) % connections.size();
+
         ReconnectState& rs = reconnectStates[i];
         if (!rs.isReady())
             continue;
@@ -179,7 +183,7 @@ static bool tryPendingReconnects(std::vector<QubicConnection>& connections, std:
         {
             LOG() << "qubicReceiveLoop: Reconnected to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
             rs.reset();
-            anyReconnected = true;
+            return true;
         }
         else
         {
@@ -187,9 +191,10 @@ static bool tryPendingReconnects(std::vector<QubicConnection>& connections, std:
             rs.scheduleRetry();
             LOG() << "qubicReceiveLoop: Connect to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort()
                 << " failed, retry in " << rs.delaySec << "s." << std::endl;
+            return false; // Attempted one, don't block further.
         }
     }
-    return anyReconnected;
+    return false;
 }
 
 void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSolution>& queue, std::vector<QubicConnection>& connections)
@@ -210,14 +215,16 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
         }
     }
 
+    size_t nextReconnIdx = 0;
+
     std::vector<pollfd_t> socketPollList;
     std::vector<size_t> pollToConnIdx; // maps poll list index -> connections index
     buildPollList(connections, socketPollList, pollToConnIdx);
 
     while (!st.stop_requested())
     {
-        // Try any pending reconnects whose delay has elapsed (non-blocking).
-        if (tryPendingReconnects(connections, reconnectStates))
+        // Try one pending reconnect per cycle to avoid blocking the recv loop.
+        if (tryOneReconnect(connections, reconnectStates, nextReconnIdx))
             buildPollList(connections, socketPollList, pollToConnIdx);
 
         if (socketPollList.empty())

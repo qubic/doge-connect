@@ -99,6 +99,7 @@ int main(int argc, char* argv[])
         LOG() << "Stratum connection successfully opened." << std::endl;
 
     // Connect to all qubic peers in parallel so fast ones are ready immediately.
+    // Max time per thread: 5s connect + 1s handshake + 0.2s = ~6.2s.
     std::vector<QubicConnection> qubicConnections(config.qubic.ips.size());
     {
         std::vector<std::thread> connectThreads;
