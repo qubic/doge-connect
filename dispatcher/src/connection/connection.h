@@ -3,6 +3,7 @@
 #include <string>
 #include <memory>
 #include <array>
+#include <atomic>
 
 #ifdef _MSC_VER
 #include <Winsock2.h>
@@ -39,14 +40,14 @@ public:
      */
     struct Socket
     {
-        bool isConnected; // true if rawSocket is valid and connected
+        std::atomic<bool> isConnected; // true if rawSocket is valid and connected
         SocketType rawSocket;
 
         Socket();
         Socket(SocketType socket)
         {
             rawSocket = socket;
-            isConnected = rawSocket != INVALID_SKT;
+            isConnected.store(rawSocket != INVALID_SKT);
         }
 
         ~Socket();
@@ -60,9 +61,9 @@ public:
         Socket(Socket&& other) noexcept : rawSocket(other.rawSocket)
         {
             // "Steal" the resource and reset the original so its destructor is not closing the socket.
+            isConnected.store(rawSocket != INVALID_SKT);
             other.rawSocket = INVALID_SKT;
-            other.isConnected = false;
-            isConnected = rawSocket != INVALID_SKT;
+            other.isConnected.store(false);
         }
 
         Socket& operator=(Socket&& other) noexcept
@@ -70,9 +71,9 @@ public:
             if (this != &other) {
                 reset(); // Close existing socket in 'this'.
                 rawSocket = other.rawSocket;
+                isConnected.store(rawSocket != INVALID_SKT);
                 other.rawSocket = INVALID_SKT;
-                other.isConnected = false;
-                isConnected = rawSocket != INVALID_SKT;
+                other.isConnected.store(false);
             }
             return *this;
         }
@@ -151,7 +152,7 @@ public:
 
     SocketType getRawSocket() const { return m_socket.rawSocket; }
 
-    bool isConnected() const { return m_socket.isConnected; }
+    bool isConnected() const { return m_socket.isConnected.load(); }
 
 protected:
     Socket m_socket;
