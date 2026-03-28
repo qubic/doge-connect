@@ -168,6 +168,7 @@ int main(int argc, char* argv[])
             if (qc.isConnected()) connectedPeers++;
 
         LOG() << "[status] net: " << connectedPeers << "/" << qubicConnections.size()
+            << " | diff: " << stats.poolDifficulty.load()
             << " | tasks: " << stats.tasksDistributed
             << " | sol recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
             << " | pool: " << stats.solutionsPassedPoolDiff

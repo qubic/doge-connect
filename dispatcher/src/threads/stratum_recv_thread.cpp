@@ -42,7 +42,7 @@ bool initStratumProtocol(
         unsigned int extraNonce2NumBytes = result[2];
         if (extraNonce2NumBytes != 8)
         {
-            ERR() << "Qubic Doge Dispatcher only accepts 8 bytes as extraNonce2 size.";
+            ERR() << "Qubic Doge Dispatcher only accepts 8 bytes as extraNonce2 size, but pool returned " << extraNonce2NumBytes << " bytes." << std::endl;
             return false;
         }
         LOG() << "Received extraNonce1 " << extraNonce1String << ", size of extraNonce2 in bytes: " << extraNonce2NumBytes << std::endl;

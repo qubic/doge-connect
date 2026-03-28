@@ -17,6 +17,7 @@ struct DispatcherStats
     std::atomic<uint64_t> solutionsAccepted{0};
     std::atomic<uint64_t> solutionsRejected{0};
     std::atomic<uint64_t> solutionsPassedPoolDiff{0};
+    std::atomic<uint64_t> poolDifficulty{1};
 };
 
 enum CustomMiningType : uint8_t

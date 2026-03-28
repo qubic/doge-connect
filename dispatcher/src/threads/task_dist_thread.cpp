@@ -237,6 +237,7 @@ void taskDistributionLoop(
                 // Example JSON: {"id": null, "method": "mining.set_difficulty", "params": [65536]}
                 poolBaseDiffDivisor = msg["params"][0];
                 currentPoolDifficulty = DifficultyTarget(divideTarget(basePoolDifficulty.getFullRep(), poolBaseDiffDivisor));
+                stats.poolDifficulty.store(poolBaseDiffDivisor);
             }
             else if (msg["method"] == "mining.notify")
             {
@@ -257,6 +258,7 @@ void taskDistributionLoop(
                         {
                             poolBaseDiffDivisor = nextMsg["params"][0];
                             currentPoolDifficulty = DifficultyTarget(divideTarget(basePoolDifficulty.getFullRep(), poolBaseDiffDivisor));
+                            stats.poolDifficulty.store(poolBaseDiffDivisor);
                         }
                         else if (nextMsg["method"] == "mining.notify")
                         {
