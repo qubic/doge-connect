@@ -53,9 +53,18 @@ void distributeTask(
     dispatcherTask.taskId = params[0];
 
     std::vector<uint8_t> version = hexToBytes(params[5], ByteArrayFormat::LittleEndian);
-    std::vector<uint8_t> prevHash = hexToBytes(params[1], ByteArrayFormat::LittleEndian);
     std::vector<uint8_t> ntime = hexToBytes(params[7], ByteArrayFormat::LittleEndian);
     std::vector<uint8_t> nbits = hexToBytes(params[6], ByteArrayFormat::LittleEndian);
+
+    // Stratum prevHash is in word-swapped format: each 4-byte word has its bytes reversed
+    // relative to the block header. Parse as-is, then swap bytes within each 4-byte word
+    // to get the correct block header byte order.
+    std::vector<uint8_t> prevHash = hexToBytes(params[1], ByteArrayFormat::BigEndian);
+    for (size_t i = 0; i + 3 < prevHash.size(); i += 4)
+    {
+        std::swap(prevHash[i], prevHash[i + 3]);
+        std::swap(prevHash[i + 1], prevHash[i + 2]);
+    }
 
     if (version.size() != 4 || prevHash.size() != 32 || ntime.size() != 4 || nbits.size() != 4)
     {
@@ -193,20 +202,27 @@ void checkShareResponse(const nlohmann::json& msg)
     // This is the response to a share submission via 'mining.submit'.
     unsigned int shareId = msg["id"];
     // TODO: verify that id matches submitted share.
-    if (msg["result"] == false)
+    // Check for error field: pools may return {"result": null, "error": [code, "msg", null]}
+    // or {"result": false, "error": [code, "msg", null]} for rejected shares.
+    if (msg.contains("error") && msg["error"] != nullptr)
     {
-        // Share was rejected, the error contains the reason.
-        // Example JSON: {"id": 4, "result": false, "error": [21, "Job not found", null]}
-        if (msg["error"] != nullptr && msg["error"].size() > 1)
+        // Share was rejected.
+        // Example JSON: {"id": 4, "result": null, "error": [23, "Low difficulty share", null]}
+        if (msg["error"].is_array() && msg["error"].size() > 1)
             LOG() << "Share with submission id " << shareId << " was rejected by pool. Reason: " << msg["error"][1] << " (error code " << msg["error"][0] << ")." << std::endl;
         else
-            LOG() << "Share with submission id " << shareId << " was rejected by pool." << std::endl;
+            LOG() << "Share with submission id " << shareId << " was rejected by pool. Error: " << msg["error"] << std::endl;
     }
-    else
+    else if (msg.contains("result") && msg["result"] == true)
     {
         // Share was accepted.
         // Example JSON: {"id": 4, "result": true, "error": null}
         LOG() << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
+    }
+    else
+    {
+        // Unexpected response format.
+        LOG() << "Share with submission id " << shareId << " got unexpected pool response: " << msg.dump() << std::endl;
     }
 }
 

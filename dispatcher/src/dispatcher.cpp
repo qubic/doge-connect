@@ -133,7 +133,9 @@ int main(int argc, char* argv[])
     std::atomic<bool> keepRunning = true; // Atomic flag to signal the rest of the app to stop.
     std::atomic<uint64_t> nextStratumSendId = 3; // ids 1 and 2 were already used for protocol initialization
 
-    // Maximum target for Dogecoin/Litecoin 0x1f00ffff (see https://bitcoin.stackexchange.com/questions/22929/full-example-data-for-scrypt-stratum-client)
+    // Scrypt stratum difficulty base: 0x1f00ffff (scrypt diff 1).
+    // All scrypt miners and pools use this base. The earlier "high-hash" rejections were caused
+    // by wrong prevHash byte order (full reversal vs word-swap), not wrong difficulty base.
     const DifficultyTarget poolBaseDifficulty(std::array<uint8_t, 4>({ 0xff, 0xff, 0x00, 0x1f })); // mantissa (LSB to MSB), exponent
     // poolCurrentDifficulty is only read/written in the taskDistThread. If we ever add more threads accessing this, it needs to have a mutex.
     DifficultyTarget poolCurrentDifficulty = poolBaseDifficulty;

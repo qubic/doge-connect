@@ -2,6 +2,7 @@
 
 #include <stop_token>
 #include <iostream>
+#include <unordered_set>
 
 #include "log.h"
 #include <optional>
@@ -94,11 +95,33 @@ void shareValidationLoop(
     std::array<uint8_t, 80> fullHeader;
     std::array<uint8_t, 32> scryptHash;
 
+    // Deduplication: track recently submitted (jobId, nonce) pairs to avoid duplicate pool submissions.
+    // Solutions may arrive multiple times via qubic gossip from different peers.
+    std::unordered_set<std::string> recentSubmits;
+    uint64_t lastCleanJobId = 0;
+
     while (!st.stop_requested())
     {
         DispatcherMiningSolution sol = queue.pop(); // pop() blocks until data is available
 
         stats.solutionsReceived++;
+
+        // Deduplicate: key = jobId + nonce (unique per share).
+        std::string dedupeKey = std::to_string(sol.jobId) + "_"
+            + bytesToHex(sol.nonce, ByteArrayFormat::BigEndian)
+            + bytesToHex(sol.extraNonce2, ByteArrayFormat::BigEndian);
+        if (recentSubmits.count(dedupeKey))
+        {
+            stats.solutionsRejected++;
+            continue; // silently skip duplicate
+        }
+
+        // Clear dedup set when a new clean job arrives (old shares are irrelevant).
+        if (sol.jobId != lastCleanJobId)
+        {
+            recentSubmits.clear();
+            lastCleanJobId = sol.jobId;
+        }
 
         // Check that solution matches an active task.
         std::optional<DispatcherMiningTask> taskOptional = activeTasks.get(sol.jobId);
@@ -162,9 +185,11 @@ void shareValidationLoop(
         }
 
         LOG() << "shareValidationLoop: Solution from " << minerId << " comp " << computorIdx
+            << " job " << sol.jobId << " (pool " << task.taskId << ")"
             << " PASSED pool diff (" << solDiff << ")." << std::endl;
         stats.solutionsAccepted++;
         stats.solutionsPassedPoolDiff++;
+        recentSubmits.insert(dedupeKey);
 
         if (connection.isConnected())
         {
@@ -180,6 +205,8 @@ void shareValidationLoop(
                 bytesToHex(sol.nTime, ByteArrayFormat::LittleEndian),
                 bytesToHex(sol.nonce, ByteArrayFormat::LittleEndian)
             };
+
+            LOG() << "shareValidationLoop: Submitting to pool: " << message.dump() << std::endl;
 
             // Stratum messages need to end with newline.
             connection.sendMessage(message.dump() + "\n");
