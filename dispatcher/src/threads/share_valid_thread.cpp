@@ -27,37 +27,57 @@ static std::string shortIdentity(const std::array<uint8_t, 32>& pubkey)
     return std::string(identity).substr(0, 8) + "..";
 }
 
-// Helper: compute difficulty of a hash relative to the scrypt base target (0x1f00ffff).
-// Returns 0 if the hash is all zeros.
+// Helper: compute approximate difficulty of a hash relative to the scrypt base target (0x1f00ffff).
+// difficulty = baseTarget / hash. Returns 0 if hash is all zeros or higher than base target.
 static uint64_t hashDifficulty(const std::array<uint8_t, 32>& hash)
 {
     // Base target for scrypt difficulty 1: 0x1f00ffff compact.
-    static const std::array<uint8_t, 32> baseTarget = calculateFullRepFromCompactRep({0xff, 0xff, 0x00, 0x1f});
+    // Non-zero bytes at positions 28 (0xff) and 29 (0xff), i.e. 0x0000ffff << 224.
+    // As a 64-bit value shifted to top: 0xffff followed by zeros.
+    static constexpr int baseMsb = 29; // MSB position of base target
 
-    // Find the most significant non-zero byte of the hash.
-    int msb = -1;
+    // Find MSB of hash.
+    int hashMsb = -1;
     for (int i = 31; i >= 0; --i)
     {
-        if (hash[i] != 0) { msb = i; break; }
+        if (hash[i] != 0) { hashMsb = i; break; }
     }
-    if (msb < 0) return 0;
+    if (hashMsb < 0) return 0;
+    if (hashMsb > baseMsb) return 0; // hash > base target, difficulty < 1
 
-    // Approximate difficulty = baseTarget / hash using the top bytes.
-    // Use 8 bytes from the MSB of each for a 64-bit division.
-    uint64_t hashTop = 0, targetTop = 0;
+    // Read top 8 bytes of hash from its MSB.
+    uint64_t hashTop = 0;
     for (int i = 0; i < 8; ++i)
     {
-        int hi = msb - i;
-        hashTop = (hashTop << 8) | (hi >= 0 ? hash[hi] : 0);
-    }
-    // Align target to same byte position.
-    for (int i = 0; i < 8; ++i)
-    {
-        int ti = msb - i;
-        targetTop = (targetTop << 8) | (ti >= 0 && ti < 32 ? baseTarget[ti] : 0);
+        int idx = hashMsb - i;
+        hashTop = (hashTop << 8) | (idx >= 0 ? hash[idx] : 0);
     }
     if (hashTop == 0) return 0;
-    return targetTop / hashTop;
+
+    // Shift base target value to align with hashTop's byte position.
+    // baseTarget effectively = 0xffff at byte 28-29.
+    // If hashMsb == 29: baseTop = 0xffff000000000000 → diff = baseTop / hashTop
+    // If hashMsb == 27: hash is 2 bytes lower → diff is 2^16 times higher.
+    int byteShift = baseMsb - hashMsb;
+    // Base target top 8 bytes from MSB = 0x00ffff0000000000 (byte 29=0xff, 28=0xff, 30=0x00)
+    uint64_t baseTop = 0x00FFFF0000000000ULL;
+
+    if (byteShift > 0)
+    {
+        // Hash MSB is lower than base MSB → difficulty is higher.
+        // Each byte shift = 256x more difficulty. Use multiplication to avoid overflow.
+        uint64_t diff = baseTop / hashTop;
+        for (int i = 0; i < byteShift; ++i)
+        {
+            if (diff > UINT64_MAX / 256) return UINT64_MAX; // overflow guard
+            diff *= 256;
+        }
+        return diff;
+    }
+    else
+    {
+        return baseTop / hashTop;
+    }
 }
 
 

@@ -72,8 +72,9 @@ void distributeTask(
     memcpy(dispatcherTask.partialHeader.data() + 4, prevHash.data(), 32);
     memcpy(dispatcherTask.nBits.data(), nbits.data(), 4);
 
-    // Use compact-roundtripped target to match what miners see (compact rep is lossy).
-    dispatcherTask.targetPool = calculateFullRepFromCompactRep(currentPoolDifficulty.getCompactRep());
+    // Use the precise pool target for validation (not compact-roundtripped) to avoid
+    // "high-hash" rejections from borderline shares that pass the lossy compact target.
+    dispatcherTask.targetPool = currentPoolDifficulty.getFullRep();
 
     dispatcherTask.coinbase1 = hexToBytes(params[2], ByteArrayFormat::BigEndian);
     dispatcherTask.coinbase2 = hexToBytes(params[3], ByteArrayFormat::BigEndian);
