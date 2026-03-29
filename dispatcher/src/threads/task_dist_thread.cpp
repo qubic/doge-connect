@@ -24,7 +24,6 @@ void distributeTask(
     ConcurrentHashMap<uint64_t, DispatcherMiningTask>& activeTasks,
     std::vector<QubicConnection>& connections,
     const DifficultyTarget& currentPoolDifficulty,
-    const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
     bool propagateCleanJobFlag,
     const DispatcherSigningContext& signingCtx,
@@ -73,8 +72,8 @@ void distributeTask(
     memcpy(dispatcherTask.partialHeader.data() + 4, prevHash.data(), 32);
     memcpy(dispatcherTask.nBits.data(), nbits.data(), 4);
 
-    dispatcherTask.targetPool = currentPoolDifficulty.getFullRep();
-    dispatcherTask.targetDispatcher = dispatcherDifficulty.getFullRep();
+    // Use compact-roundtripped target to match what miners see (compact rep is lossy).
+    dispatcherTask.targetPool = calculateFullRepFromCompactRep(currentPoolDifficulty.getCompactRep());
 
     dispatcherTask.coinbase1 = hexToBytes(params[2], ByteArrayFormat::BigEndian);
     dispatcherTask.coinbase2 = hexToBytes(params[3], ByteArrayFormat::BigEndian);
@@ -117,7 +116,7 @@ void distributeTask(
     offset += sizeof(CustomQubicMiningTask);
     QubicDogeMiningTask* dogeTask = reinterpret_cast<QubicDogeMiningTask*>(buffer.data() + offset);
     dogeTask->cleanJobQueue = cleanJobQueue;
-    dogeTask->dispatcherDifficulty = dispatcherDifficulty.getCompactRep();
+    dogeTask->dispatcherDifficulty = currentPoolDifficulty.getCompactRep();
 
     memcpy(dogeTask->version.data(), version.data(), 4);
     memcpy(dogeTask->nTime.data(), ntime.data(), 4);
@@ -217,7 +216,6 @@ void taskDistributionLoop(
     std::vector<QubicConnection>& connections,
     const DifficultyTarget& basePoolDifficulty,
     DifficultyTarget& currentPoolDifficulty,
-    const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats
@@ -276,7 +274,7 @@ void taskDistributionLoop(
                     LOG() << "Skipped " << skipped << " queued job(s), distributing latest only." << std::endl;
 
                 distributeTask(std::move(latestNotify), activeTasks, connections, currentPoolDifficulty,
-                    dispatcherDifficulty, extraNonce1, cleanJobQueue, signingCtx, stats);
+                    extraNonce1, cleanJobQueue, signingCtx, stats);
             }
         }
         else if (msg["id"].is_number_unsigned())

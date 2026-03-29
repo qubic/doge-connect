@@ -74,6 +74,7 @@ void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<Di
         .nonce = dogeSol->nonce,
         .merkleRoot = dogeSol->merkleRoot,
         .extraNonce2 = dogeSol->extraNonce2,
+        .sourcePublicKey = qubicSol->sourcePublicKey,
     };
 
     queue.push(std::move(dispSol));

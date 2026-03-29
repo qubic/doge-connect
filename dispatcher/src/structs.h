@@ -16,6 +16,7 @@ struct DispatcherStats
     std::atomic<uint64_t> solutionsReceived{0};
     std::atomic<uint64_t> solutionsAccepted{0};
     std::atomic<uint64_t> solutionsRejected{0};
+    std::atomic<uint64_t> solutionsStale{0};
     std::atomic<uint64_t> solutionsPassedPoolDiff{0};
     std::atomic<uint64_t> poolDifficulty{1};
 };
@@ -113,8 +114,7 @@ struct DispatcherMiningTask
 {
     std::string taskId; // the pool's taskId
 
-    std::array<uint8_t, 32> targetPool; // current (i.e. when receiving the task) pool difficulty target converted to a 256-bit number (little endian)
-    std::array<uint8_t, 32> targetDispatcher; // dispatcher difficulty target converted to a 256-bit number (little endian)
+    std::array<uint8_t, 32> targetPool; // pool difficulty target converted to a 256-bit number (little endian), derived from compact rep sent to miners
 
     // Full header can be constructed via concatenating partialHeader1 + merkleRoot + miner's nTime + nBits + miner's nonce.
     std::array<uint8_t, 36> partialHeader; // 4 bytes version, 32 bytes prevBlockHash
@@ -141,6 +141,7 @@ struct DispatcherMiningSolution
     std::array<uint8_t, 4> nonce; // little endian
     std::array<uint8_t, 32> merkleRoot; // to avoid dispatcher having to calculate the root again, same byte order as it appears in the header
     std::array<uint8_t, 8> extraNonce2; // same byte order as it was used to create the merkle root
+    std::array<uint8_t, 32> sourcePublicKey; // public key of the miner who submitted the solution
 };
 
 // ----- Structs for the Qubic connection -----

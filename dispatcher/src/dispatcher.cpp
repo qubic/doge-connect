@@ -134,7 +134,6 @@ int main(int argc, char* argv[])
     std::atomic<uint64_t> nextStratumSendId = 3; // ids 1 and 2 were already used for protocol initialization
 
     // Maximum target for Dogecoin/Litecoin 0x1f00ffff (see https://bitcoin.stackexchange.com/questions/22929/full-example-data-for-scrypt-stratum-client)
-    DifficultyTarget dispatcherDifficulty(std::array<uint8_t, 4>({ 0xff, 0xff, 0x00, 0x1f })); // mantissa (LSB to MSB), exponent
     const DifficultyTarget poolBaseDifficulty(std::array<uint8_t, 4>({ 0xff, 0xff, 0x00, 0x1f })); // mantissa (LSB to MSB), exponent
     // poolCurrentDifficulty is only read/written in the taskDistThread. If we ever add more threads accessing this, it needs to have a mutex.
     DifficultyTarget poolCurrentDifficulty = poolBaseDifficulty;
@@ -149,7 +148,7 @@ int main(int argc, char* argv[])
         std::ref(config.pool), std::ref(extraNonce1));
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
+        std::ref(poolCurrentDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.
@@ -157,6 +156,11 @@ int main(int argc, char* argv[])
         std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName, std::ref(stats));
 
     LOG() << "Dispatcher running. Press 'q' to quit." << std::endl;
+
+    // Hashrate estimation: each accepted solution at dispatcher difficulty 1 = 2^32 hashes.
+    auto lastHashrateTime = std::chrono::steady_clock::now();
+    uint64_t lastAccepted = 0;
+    double estimatedHashrate = 0.0;
 
     while (keepRunning)
     {
@@ -167,10 +171,43 @@ int main(int argc, char* argv[])
         for (const auto& qc : qubicConnections)
             if (qc.isConnected()) connectedPeers++;
 
+        // Calculate hashrate from accepted solutions delta.
+        auto now = std::chrono::steady_clock::now();
+        double elapsedSec = std::chrono::duration<double>(now - lastHashrateTime).count();
+        uint64_t currentAccepted = stats.solutionsAccepted.load();
+        if (elapsedSec > 0 && currentAccepted > lastAccepted)
+        {
+            double newRate = static_cast<double>(currentAccepted - lastAccepted) * 4294967296.0 / elapsedSec;
+            // Exponential moving average (smoothing factor 0.3 for new, 0.7 for old).
+            estimatedHashrate = (estimatedHashrate == 0.0) ? newRate : 0.7 * estimatedHashrate + 0.3 * newRate;
+            lastHashrateTime = now;
+            lastAccepted = currentAccepted;
+        }
+        else if (elapsedSec > 30.0 && currentAccepted == lastAccepted)
+        {
+            // No solutions for 30s, decay the estimate.
+            estimatedHashrate *= 0.5;
+            lastHashrateTime = now;
+        }
+
+        // Format hashrate with appropriate unit.
+        std::string hrStr;
+        if (estimatedHashrate >= 1e12)
+            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e12)) + " TH/s";
+        else if (estimatedHashrate >= 1e9)
+            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e9)) + " GH/s";
+        else if (estimatedHashrate >= 1e6)
+            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e6)) + " MH/s";
+        else if (estimatedHashrate >= 1e3)
+            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e3)) + " KH/s";
+        else
+            hrStr = std::to_string(static_cast<int>(estimatedHashrate)) + " H/s";
+
         LOG() << "[status] net: " << connectedPeers << "/" << qubicConnections.size()
             << " | diff: " << stats.poolDifficulty.load()
+            << " | hr: " << hrStr
             << " | tasks: " << stats.tasksDistributed
-            << " | sol recv/accepted/rejected: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected
+            << " | sol recv/acc/rej/stale: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected << "/" << stats.solutionsStale
             << " | pool: " << stats.solutionsPassedPoolDiff
             << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()
             << " | active: " << activeTasks.size() << std::endl;

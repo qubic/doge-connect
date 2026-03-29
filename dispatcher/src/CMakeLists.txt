@@ -9,6 +9,8 @@ add_library(hashutil
 )
 target_include_directories(hashutil
   INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/hash_util)
+# scrypt.c uses aggressive pointer casting that breaks under -O3 strict aliasing.
+set_source_files_properties(hash_util/scrypt.c PROPERTIES COMPILE_OPTIONS "-fno-strict-aliasing")
 
 # qubic crypto library (FourQ + KangarooTwelve, from qubic-cli)
 add_library(qubiccrypto

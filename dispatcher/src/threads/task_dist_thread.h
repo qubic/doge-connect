@@ -20,8 +20,7 @@
  * @param activeTasks Currently active, i.e. already distributed, mining tasks.
  * @param connections The connections to send the tasks to.
  * @param basePoolDifficulty The pool's constant base difficulty.
- * @param currentPoolDifficulty The current pool difficulty.
- * @param dispatcherDifficulty The current Dispatcher difficulty.
+ * @param currentPoolDifficulty The current pool difficulty (also sent to miners as dispatcher difficulty).
  * @param extraNonce1 The extraNonce1 received from the pool via stratum in the 'mining.subscribe' response.
  * @param signingCtx Signing context for efficient signing of the tasks with the dispatcher signature.
  * @param stats Dispatcher stats.
@@ -33,7 +32,6 @@ void taskDistributionLoop(
     std::vector<QubicConnection>& connections,
     const DifficultyTarget& basePoolDifficulty,
     DifficultyTarget& currentPoolDifficulty,
-    const DifficultyTarget& dispatcherDifficulty,
     const std::vector<uint8_t>& extraNonce1,
     const DispatcherSigningContext& signingCtx,
     DispatcherStats& stats

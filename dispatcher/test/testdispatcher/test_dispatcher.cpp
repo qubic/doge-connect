@@ -112,7 +112,6 @@ int main(int argc, char* argv[])
     std::atomic<bool> keepRunning = true; // Atomic flag to signal the rest of the app to stop.
 
     // Maximum target for Dogecoin/Litecoin 0x1f00ffff (see https://bitcoin.stackexchange.com/questions/22929/full-example-data-for-scrypt-stratum-client)
-    DifficultyTarget dispatcherDifficulty(std::array<uint8_t, 4>({ 0xff, 0xff, 0x00, 0x1f })); // mantissa (LSB to MSB), exponent
     const DifficultyTarget poolBaseDifficulty(std::array<uint8_t, 4>({ 0xff, 0xff, 0x00, 0x1f })); // mantissa (LSB to MSB), exponent
     // poolCurrentDifficulty is only read/written in the taskDistThread. If we ever add more threads accessing this, it needs to have a mutex.
     DifficultyTarget poolCurrentDifficulty = poolBaseDifficulty;
@@ -129,7 +128,7 @@ int main(int argc, char* argv[])
     std::jthread stratumRecvThread(dummyStratumReceiveLoop, std::ref(recvStratumMessages), config.testDispatcher.timeBetweenJobsSec, config.testDispatcher.frequencyClearJobs);
     // Start taskDistThread to process received stratum messages and send them to the Qubic network.
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(dispatcherDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
+        std::ref(poolCurrentDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
     std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
     // Start the shareValidThread to validate received solutions. The test dispatcher does not submit to a pool, so fill data with dummies.
