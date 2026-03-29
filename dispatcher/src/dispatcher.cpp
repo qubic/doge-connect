@@ -174,12 +174,14 @@ int main(int argc, char* argv[])
             if (qc.isConnected()) connectedPeers++;
 
         // Calculate hashrate from accepted solutions delta.
+        // For scrypt with 0x1f base: hashes_per_share = diff * 2^64 / ScryptDiff1LongTarget = diff * 65536.
         auto now = std::chrono::steady_clock::now();
         double elapsedSec = std::chrono::duration<double>(now - lastHashrateTime).count();
         uint64_t currentAccepted = stats.solutionsAccepted.load();
+        double currentDiff = static_cast<double>(stats.poolDifficulty.load());
         if (elapsedSec > 0 && currentAccepted > lastAccepted)
         {
-            double newRate = static_cast<double>(currentAccepted - lastAccepted) * 4294967296.0 / elapsedSec;
+            double newRate = static_cast<double>(currentAccepted - lastAccepted) * currentDiff * 65536.0 / elapsedSec;
             // Exponential moving average (smoothing factor 0.3 for new, 0.7 for old).
             estimatedHashrate = (estimatedHashrate == 0.0) ? newRate : 0.7 * estimatedHashrate + 0.3 * newRate;
             lastHashrateTime = now;
@@ -210,7 +212,7 @@ int main(int argc, char* argv[])
             << " | hr: " << hrStr
             << " | tasks: " << stats.tasksDistributed
             << " | sol recv/acc/rej/stale: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected << "/" << stats.solutionsStale
-            << " | pool: " << stats.solutionsPassedPoolDiff
+            << " | pool: " << stats.solutionsPassedPoolDiff << " (acc/rej: " << stats.poolSharesAccepted << "/" << stats.poolSharesRejected << ")"
             << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()
             << " | active: " << activeTasks.size() << std::endl;
 

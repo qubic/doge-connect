@@ -197,7 +197,7 @@ void distributeTask(
     stats.tasksDistributed++;
 }
 
-void checkShareResponse(const nlohmann::json& msg)
+void checkShareResponse(const nlohmann::json& msg, DispatcherStats& stats)
 {
     // This is the response to a share submission via 'mining.submit'.
     unsigned int shareId = msg["id"];
@@ -208,6 +208,7 @@ void checkShareResponse(const nlohmann::json& msg)
     {
         // Share was rejected.
         // Example JSON: {"id": 4, "result": null, "error": [23, "Low difficulty share", null]}
+        stats.poolSharesRejected++;
         if (msg["error"].is_array() && msg["error"].size() > 1)
             LOG() << "Share with submission id " << shareId << " was rejected by pool. Reason: " << msg["error"][1] << " (error code " << msg["error"][0] << ")." << std::endl;
         else
@@ -217,6 +218,7 @@ void checkShareResponse(const nlohmann::json& msg)
     {
         // Share was accepted.
         // Example JSON: {"id": 4, "result": true, "error": null}
+        stats.poolSharesAccepted++;
         LOG() << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
     }
     else
@@ -284,7 +286,7 @@ void taskDistributionLoop(
                     }
                     else if (nextMsg["id"].is_number_unsigned())
                     {
-                        checkShareResponse(nextMsg);
+                        checkShareResponse(nextMsg, stats);
                     }
                 }
                 if (skipped > 0)
@@ -296,7 +298,7 @@ void taskDistributionLoop(
         }
         else if (msg["id"].is_number_unsigned())
         {
-            checkShareResponse(msg);
+            checkShareResponse(msg, stats);
         }
     }
 }
