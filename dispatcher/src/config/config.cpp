@@ -65,6 +65,7 @@ DispatcherAppConfig parseDispatcherConfig(const nlohmann::json& j)
 
     config.qubic = parseQubicConfig(j);
     config.identity = parseIdentityConfig(j);
+    config.statsFile = j.value("statsFile", "");
     return config;
 }
 

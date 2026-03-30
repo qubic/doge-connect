@@ -51,6 +51,7 @@ struct DispatcherAppConfig
     PoolConfig pool;
     QubicConfig qubic;
     DispatcherIdentityConfig identity;
+    std::string statsFile; // optional path to write JSON stats (empty = disabled)
 };
 
 /**

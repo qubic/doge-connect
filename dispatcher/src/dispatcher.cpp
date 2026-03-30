@@ -1,5 +1,6 @@
 #include <string>
 #include <iostream>
+#include <fstream>
 
 #include "log.h"
 #include <cstring>
@@ -159,10 +160,13 @@ int main(int argc, char* argv[])
 
     LOG() << "Dispatcher running. Press 'q' to quit." << std::endl;
 
-    // Hashrate estimation: each accepted solution at dispatcher difficulty 1 = 2^32 hashes.
-    auto lastHashrateTime = std::chrono::steady_clock::now();
-    uint64_t lastAccepted = 0;
+    auto startTime = std::chrono::steady_clock::now();
+
+    // Hashrate estimation using a rolling window of accepted solutions.
+    auto hashrateWindowStart = std::chrono::steady_clock::now();
+    uint64_t windowStartAccepted = 0;
     double estimatedHashrate = 0.0;
+    constexpr double hashrateWindowSec = 300.0; // 5-minute rolling window
 
     while (keepRunning)
     {
@@ -173,25 +177,22 @@ int main(int argc, char* argv[])
         for (const auto& qc : qubicConnections)
             if (qc.isConnected()) connectedPeers++;
 
-        // Calculate hashrate from accepted solutions delta.
-        // For scrypt with 0x1f base: hashes_per_share = diff * 2^64 / ScryptDiff1LongTarget = diff * 65536.
+        // Calculate hashrate over a rolling window.
+        // For scrypt with 0x1f base: hashes_per_share = diff * 65536.
         auto now = std::chrono::steady_clock::now();
-        double elapsedSec = std::chrono::duration<double>(now - lastHashrateTime).count();
+        double elapsedSec = std::chrono::duration<double>(now - hashrateWindowStart).count();
         uint64_t currentAccepted = stats.solutionsAccepted.load();
         double currentDiff = static_cast<double>(stats.poolDifficulty.load());
-        if (elapsedSec > 0 && currentAccepted > lastAccepted)
+        uint64_t windowShares = currentAccepted - windowStartAccepted;
+
+        if (elapsedSec > 0 && windowShares > 0)
+            estimatedHashrate = static_cast<double>(windowShares) * currentDiff * 65536.0 / elapsedSec;
+
+        // Reset window periodically to avoid stale data dominating.
+        if (elapsedSec >= hashrateWindowSec)
         {
-            double newRate = static_cast<double>(currentAccepted - lastAccepted) * currentDiff * 65536.0 / elapsedSec;
-            // Exponential moving average (smoothing factor 0.3 for new, 0.7 for old).
-            estimatedHashrate = (estimatedHashrate == 0.0) ? newRate : 0.7 * estimatedHashrate + 0.3 * newRate;
-            lastHashrateTime = now;
-            lastAccepted = currentAccepted;
-        }
-        else if (elapsedSec > 30.0 && currentAccepted == lastAccepted)
-        {
-            // No solutions for 30s, decay the estimate.
-            estimatedHashrate *= 0.5;
-            lastHashrateTime = now;
+            hashrateWindowStart = now;
+            windowStartAccepted = currentAccepted;
         }
 
         // Format hashrate with appropriate unit.
@@ -216,7 +217,54 @@ int main(int argc, char* argv[])
             << " | queues: stratum=" << recvStratumMessages.size() << " solutions=" << recvQubicSolutions.size()
             << " | active: " << activeTasks.size() << std::endl;
 
-        // TODO: handle connection error (threads will shut down on recv/send error and need to be restarted after connection is re-established)
+        // Write JSON stats file if configured.
+        if (!config.statsFile.empty())
+        {
+            uint64_t uptimeSec = static_cast<uint64_t>(
+                std::chrono::duration<double>(now - startTime).count());
+
+            nlohmann::json statsJson = {
+                {"timestamp", std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count()},
+                {"uptime_seconds", uptimeSec},
+                {"network", {
+                    {"connected_peers", connectedPeers},
+                    {"total_peers", qubicConnections.size()}
+                }},
+                {"mining", {
+                    {"hashrate", static_cast<uint64_t>(estimatedHashrate)},
+                    {"hashrate_display", hrStr},
+                    {"pool_difficulty", stats.poolDifficulty.load()},
+                    {"tasks_distributed", stats.tasksDistributed.load()}
+                }},
+                {"solutions", {
+                    {"received", stats.solutionsReceived.load()},
+                    {"accepted", stats.solutionsAccepted.load()},
+                    {"rejected", stats.solutionsRejected.load()},
+                    {"stale", stats.solutionsStale.load()}
+                }},
+                {"pool", {
+                    {"submitted", stats.solutionsPassedPoolDiff.load()},
+                    {"accepted", stats.poolSharesAccepted.load()},
+                    {"rejected", stats.poolSharesRejected.load()}
+                }},
+                {"queues", {
+                    {"stratum", recvStratumMessages.size()},
+                    {"solutions", recvQubicSolutions.size()}
+                }},
+                {"active_tasks", activeTasks.size()}
+            };
+
+            // Write atomically: write to tmp file then rename.
+            std::string tmpPath = config.statsFile + ".tmp";
+            std::ofstream out(tmpPath);
+            if (out.is_open())
+            {
+                out << statsJson.dump(2) << std::endl;
+                out.close();
+                std::rename(tmpPath.c_str(), config.statsFile.c_str());
+            }
+        }
     }
 
     // Close connection so that recv does not block the stratumRecvThread/qubicRecvThread.

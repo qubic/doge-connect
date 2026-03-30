@@ -104,17 +104,15 @@ void shareValidationLoop(
     {
         DispatcherMiningSolution sol = queue.pop(); // pop() blocks until data is available
 
-        stats.solutionsReceived++;
-
-        // Deduplicate: key = jobId + nonce (unique per share).
+        // Deduplicate: key = jobId + nonce + extraNonce2 (unique per share).
+        // Skip before counting — duplicates from qubic gossip are not interesting.
         std::string dedupeKey = std::to_string(sol.jobId) + "_"
             + bytesToHex(sol.nonce, ByteArrayFormat::BigEndian)
             + bytesToHex(sol.extraNonce2, ByteArrayFormat::BigEndian);
         if (recentSubmits.count(dedupeKey))
-        {
-            stats.solutionsRejected++;
             continue; // silently skip duplicate
-        }
+
+        stats.solutionsReceived++;
 
         // Clear dedup set when a new clean job arrives (old shares are irrelevant).
         if (sol.jobId != lastCleanJobId)
