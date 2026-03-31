@@ -52,6 +52,7 @@ struct DispatcherAppConfig
     QubicConfig qubic;
     DispatcherIdentityConfig identity;
     std::string statsFile; // optional path to write JSON stats (empty = disabled)
+    bool dryRun = false;   // dry mode: connect to stratum + network but don't distribute tasks or process solutions
 };
 
 /**

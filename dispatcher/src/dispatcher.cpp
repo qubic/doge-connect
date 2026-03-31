@@ -143,20 +143,51 @@ int main(int argc, char* argv[])
 
     DispatcherStats stats;
 
+    if (config.dryRun)
+        LOG() << "*** DRY RUN MODE: connected to stratum + network but NOT distributing tasks or processing solutions ***" << std::endl;
+
     // Start all other threads. std::ref is needed here to force a pass by reference for the shared variables.
     // Start the input thread to react to key presses (currently supported: 'q' to quit).
     std::jthread inputThread(inputThreadLoop, std::ref(keepRunning));
     // Start the stratumRecvThread to receive messages from the mining pool via stratum TCP.
     std::jthread stratumRecvThread(stratumReceiveLoop, std::ref(recvStratumMessages), std::ref(stratumConnection),
         std::ref(config.pool), std::ref(extraNonce1));
-    // Start taskDistThread to process received stratum messages and send them to the Qubic network.
-    std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
-        std::ref(poolCurrentDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
-    // Start the qubicRecvThread to receive solutions from the qubic network.
-    std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
-    // Start the shareValidThread to validate received solutions and submit to pool if difficulty is high enough.
-    std::jthread shareValidThread(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
-        std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName, std::ref(stats));
+
+    // In dry mode: skip task distribution and solution processing threads.
+    // Instead, drain the stratum queue to track difficulty and count tasks.
+    std::optional<std::jthread> taskDistThread, qubicRecvThread, shareValidThread, dryDrainThread;
+    if (!config.dryRun)
+    {
+        taskDistThread.emplace(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
+            std::ref(poolCurrentDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
+        qubicRecvThread.emplace(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
+        shareValidThread.emplace(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
+            std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName, std::ref(stats));
+    }
+    else
+    {
+        // Dry mode: drain stratum messages to track difficulty without distributing tasks.
+        dryDrainThread.emplace([&](std::stop_token st) {
+            while (!st.stop_requested())
+            {
+                nlohmann::json msg = recvStratumMessages.pop();
+                if (!msg.contains("id")) continue;
+                if (msg["id"] == nullptr && msg.contains("method"))
+                {
+                    if (msg["method"] == "mining.set_difficulty")
+                    {
+                        uint64_t diff = msg["params"][0];
+                        stats.poolDifficulty.store(diff);
+                        LOG() << "Dry mode: pool difficulty updated to " << diff << std::endl;
+                    }
+                    else if (msg["method"] == "mining.notify")
+                    {
+                        stats.tasksDistributed++;
+                    }
+                }
+            }
+        });
+    }
 
     LOG() << "Dispatcher running. Press 'q' to quit." << std::endl;
 
@@ -272,11 +303,9 @@ int main(int argc, char* argv[])
     for (auto& qc : qubicConnections)
         qc.closeConnection();
     // Request stop of the taskDistThread manually and push a dummy object onto the queue to break the blocking pop().
-    taskDistThread.request_stop();
-    recvStratumMessages.push(nlohmann::json::object());
-    // Request stop of the shareValidThread manually and push a dummy object onto the queue to break the blocking pop().
-    shareValidThread.request_stop();
-    recvQubicSolutions.push(DispatcherMiningSolution{});
+    if (taskDistThread) { taskDistThread->request_stop(); recvStratumMessages.push(nlohmann::json::object()); }
+    if (dryDrainThread) { dryDrainThread->request_stop(); recvStratumMessages.push(nlohmann::json::object()); }
+    if (shareValidThread) { shareValidThread->request_stop(); recvQubicSolutions.push(DispatcherMiningSolution{}); }
     // The jthreads are joined automatically when they are destructed.
 
     return 0;

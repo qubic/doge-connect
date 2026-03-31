@@ -66,6 +66,7 @@ DispatcherAppConfig parseDispatcherConfig(const nlohmann::json& j)
     config.qubic = parseQubicConfig(j);
     config.identity = parseIdentityConfig(j);
     config.statsFile = j.value("statsFile", "");
+    config.dryRun = j.value("dryRun", false);
     return config;
 }
 
