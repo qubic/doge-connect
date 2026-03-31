@@ -1,0 +1,8 @@
+name = "doge-stats"
+main = "src/worker.js"
+compatibility_date = "2024-01-01"
+
+# KV namespace binding: variable "stats", key used in code: "DOGE_STATS"
+[[kv_namespaces]]
+binding = "stats"
+id = "YOUR_KV_NAMESPACE_ID"  # Replace with your KV namespace ID

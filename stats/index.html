@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qubic DOGE Mining Stats</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0A1721;
+            color: #e5e7eb;
+            font-family: 'Roboto Mono', monospace;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        a { color: #60a5fa; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            font-size: 1.4em;
+            font-weight: 700;
+            color: white;
+        }
+        .header h1 span { color: #f59e0b; }
+
+        .description {
+            color: #9ca3af;
+            font-size: 0.85em;
+            line-height: 1.6;
+            max-width: 800px;
+            margin-bottom: 30px;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 25px;
+            font-size: 0.8em;
+        }
+        .status-dot {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #22c55e;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        .status-dot.offline { background: #ef4444; animation: none; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+        .status-text { color: #9ca3af; }
+        .status-text span { color: #22c55e; font-weight: 500; }
+        .status-text span.offline { color: #ef4444; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: #111d2a;
+            border: 1px solid #1e3a50;
+            border-radius: 8px;
+            padding: 18px;
+        }
+        .card-label {
+            font-size: 0.7em;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 8px;
+        }
+        .card-value {
+            font-size: 1.5em;
+            font-weight: 700;
+            color: white;
+        }
+        .card-value.hashrate { color: #f59e0b; }
+        .card-value.accepted { color: #22c55e; }
+        .card-value.rejected { color: #ef4444; }
+
+        .card-sub {
+            font-size: 0.7em;
+            color: #6b7280;
+            margin-top: 6px;
+        }
+
+        .section-title {
+            font-size: 0.9em;
+            font-weight: 700;
+            color: #9ca3af;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .bar-container {
+            background: #111d2a;
+            border: 1px solid #1e3a50;
+            border-radius: 8px;
+            padding: 18px;
+            margin-bottom: 30px;
+        }
+        .bar-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+        .bar-row:last-child { margin-bottom: 0; }
+        .bar-label {
+            font-size: 0.75em;
+            color: #9ca3af;
+            width: 80px;
+            flex-shrink: 0;
+        }
+        .bar-track {
+            flex: 1;
+            height: 20px;
+            background: #1a2836;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        .bar-fill.green { background: #22c55e; }
+        .bar-fill.yellow { background: #f59e0b; }
+        .bar-fill.red { background: #ef4444; }
+        .bar-fill.gray { background: #4b5563; }
+        .bar-value {
+            font-size: 0.75em;
+            color: #e5e7eb;
+            width: 60px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .footer {
+            border-top: 1px solid #1e3a50;
+            padding-top: 20px;
+            margin-top: 30px;
+            color: #4b5563;
+            font-size: 0.7em;
+            line-height: 1.6;
+        }
+        .footer a { color: #6b7280; }
+
+        .last-update {
+            font-size: 0.7em;
+            color: #4b5563;
+            margin-bottom: 20px;
+        }
+
+        @media (max-width: 600px) {
+            .grid { grid-template-columns: 1fr 1fr; }
+            .card-value { font-size: 1.2em; }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <svg width="100" viewBox="0 0 300 80" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0" y="0" width="8" height="80" fill="rgb(229, 231, 235)"/>
+            <rect x="16" y="0" width="8" height="80" fill="rgb(229, 231, 235)"/>
+            <text x="40" y="58" fill="rgb(229, 231, 235)" font-family="Roboto Mono, monospace" font-size="55" font-weight="700">qubic</text>
+        </svg>
+        <h1>DOGE <span>Mining</span></h1>
+    </div>
+
+    <p class="description">
+        Qubic's distributed computational power mining Dogecoin via merged mining (LTC/DOGE).
+        Tasks are distributed via the Qubic network to computors, and solutions are submitted to the mining pool.
+    </p>
+
+    <div class="status-bar">
+        <div class="status-dot" id="statusDot"></div>
+        <div class="status-text">
+            Dispatcher: <span id="statusLabel">connecting...</span>
+            &nbsp;&bull;&nbsp; Uptime: <span id="uptime" style="color:#e5e7eb">--</span>
+        </div>
+    </div>
+
+    <div class="last-update">Last update: <span id="lastUpdate">--</span></div>
+
+    <div class="section-title">Mining Overview</div>
+    <div class="grid">
+        <div class="card">
+            <div class="card-label">Hashrate</div>
+            <div class="card-value hashrate" id="hashrate">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Pool Difficulty</div>
+            <div class="card-value" id="difficulty">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Tasks Distributed</div>
+            <div class="card-value" id="tasks">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Active Tasks</div>
+            <div class="card-value" id="activeTasks">--</div>
+        </div>
+    </div>
+
+    <div class="section-title">Network</div>
+    <div class="grid">
+        <div class="card">
+            <div class="card-label">Connected Peers</div>
+            <div class="card-value" id="peers">--</div>
+            <div class="card-sub" id="peersSub"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Solution Queue</div>
+            <div class="card-value" id="queueSolutions">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Stratum Queue</div>
+            <div class="card-value" id="queueStratum">--</div>
+        </div>
+    </div>
+
+    <div class="section-title">Solutions</div>
+    <div class="bar-container">
+        <div class="bar-row">
+            <div class="bar-label">Received</div>
+            <div class="bar-track"><div class="bar-fill gray" id="barReceived" style="width:0%"></div></div>
+            <div class="bar-value" id="valReceived">0</div>
+        </div>
+        <div class="bar-row">
+            <div class="bar-label">Accepted</div>
+            <div class="bar-track"><div class="bar-fill green" id="barAccepted" style="width:0%"></div></div>
+            <div class="bar-value" id="valAccepted">0</div>
+        </div>
+        <div class="bar-row">
+            <div class="bar-label">Rejected</div>
+            <div class="bar-track"><div class="bar-fill red" id="barRejected" style="width:0%"></div></div>
+            <div class="bar-value" id="valRejected">0</div>
+        </div>
+        <div class="bar-row">
+            <div class="bar-label">Stale</div>
+            <div class="bar-track"><div class="bar-fill yellow" id="barStale" style="width:0%"></div></div>
+            <div class="bar-value" id="valStale">0</div>
+        </div>
+    </div>
+
+    <div class="section-title">Pool Shares</div>
+    <div class="grid">
+        <div class="card">
+            <div class="card-label">Submitted</div>
+            <div class="card-value" id="poolSubmitted">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Accepted</div>
+            <div class="card-value accepted" id="poolAccepted">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Rejected</div>
+            <div class="card-value rejected" id="poolRejected">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Acceptance Rate</div>
+            <div class="card-value accepted" id="acceptRate">--</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Source: <a href="https://github.com/qubic/doge-connect">github.com/qubic/doge-connect</a></p>
+        <p>Stats are updated every 5 seconds from the dispatcher's stats.json endpoint.</p>
+    </div>
+
+    <script>
+        const STATS_URL = 'stats.json';
+        const POLL_INTERVAL = 5000;
+
+        function formatUptime(seconds) {
+            const d = Math.floor(seconds / 86400);
+            const h = Math.floor((seconds % 86400) / 3600);
+            const m = Math.floor((seconds % 3600) / 60);
+            if (d > 0) return `${d}d ${h}h ${m}m`;
+            if (h > 0) return `${h}h ${m}m`;
+            return `${m}m`;
+        }
+
+        function formatNumber(n) {
+            if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+            if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+            if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+            return n.toString();
+        }
+
+        function setBar(id, value, max) {
+            const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+            document.getElementById(id).style.width = pct + '%';
+        }
+
+        let lastFetchOk = false;
+
+        async function fetchStats() {
+            try {
+                const resp = await fetch(STATS_URL + '?t=' + Date.now());
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                const d = await resp.json();
+                lastFetchOk = true;
+
+                // Status
+                document.getElementById('statusDot').className = 'status-dot';
+                const label = document.getElementById('statusLabel');
+                label.textContent = 'online';
+                label.className = '';
+                label.style.color = '#22c55e';
+
+                document.getElementById('uptime').textContent = formatUptime(d.uptime_seconds);
+
+                const ts = new Date(d.timestamp * 1000);
+                document.getElementById('lastUpdate').textContent = ts.toLocaleTimeString();
+
+                // Mining
+                document.getElementById('hashrate').textContent = d.mining.hashrate_display;
+                document.getElementById('difficulty').textContent = formatNumber(d.mining.pool_difficulty);
+                document.getElementById('tasks').textContent = formatNumber(d.mining.tasks_distributed);
+                document.getElementById('activeTasks').textContent = d.active_tasks;
+
+                // Network
+                document.getElementById('peers').textContent =
+                    d.network.connected_peers + ' / ' + d.network.total_peers;
+                const peerPct = d.network.total_peers > 0
+                    ? Math.round(d.network.connected_peers / d.network.total_peers * 100) : 0;
+                document.getElementById('peersSub').textContent = peerPct + '% connected';
+
+                document.getElementById('queueSolutions').textContent = d.queues.solutions;
+                document.getElementById('queueStratum').textContent = d.queues.stratum;
+
+                // Solutions bars
+                const maxSol = Math.max(d.solutions.received, 1);
+                document.getElementById('valReceived').textContent = d.solutions.received;
+                document.getElementById('valAccepted').textContent = d.solutions.accepted;
+                document.getElementById('valRejected').textContent = d.solutions.rejected;
+                document.getElementById('valStale').textContent = d.solutions.stale;
+                setBar('barReceived', d.solutions.received, maxSol);
+                setBar('barAccepted', d.solutions.accepted, maxSol);
+                setBar('barRejected', d.solutions.rejected, maxSol);
+                setBar('barStale', d.solutions.stale, maxSol);
+
+                // Pool
+                document.getElementById('poolSubmitted').textContent = d.pool.submitted;
+                document.getElementById('poolAccepted').textContent = d.pool.accepted;
+                document.getElementById('poolRejected').textContent = d.pool.rejected;
+                const total = d.pool.accepted + d.pool.rejected;
+                const rate = total > 0 ? (d.pool.accepted / total * 100).toFixed(1) + '%' : '--';
+                document.getElementById('acceptRate').textContent = rate;
+
+            } catch (e) {
+                if (lastFetchOk) {
+                    document.getElementById('statusDot').className = 'status-dot offline';
+                    const label = document.getElementById('statusLabel');
+                    label.textContent = 'offline';
+                    label.className = 'offline';
+                    label.style.color = '#ef4444';
+                    lastFetchOk = false;
+                }
+            }
+        }
+
+        fetchStats();
+        setInterval(fetchStats, POLL_INTERVAL);
+    </script>
+</body>
+</html>
