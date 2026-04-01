@@ -398,12 +398,9 @@ const HTML_PAGE = `<!DOCTYPE html>
                     document.getElementById('lastBlockTime').textContent = timeAgo(lastBlock.time || lastBlock.lastBlockTime || p.lastBlockTime);
                 }
 
-                // Share rate: shares per minute based on uptime
-                const uptime = p.uptime || 0;
-                if (uptime > 0) {
-                    const spm = (valid / uptime * 60).toFixed(1);
-                    document.getElementById('shareRate').textContent = spm;
-                }
+                // Share rate: use pool's perMinute if available, otherwise calculate from uptime
+                const spm = (p.shares && p.shares.perMinute != null) ? p.shares.perMinute : (p.uptime > 0 ? (valid / p.uptime * 60) : 0);
+                document.getElementById('shareRate').textContent = parseFloat(spm).toFixed(1);
 
                 // Invalid rate
                 const total = valid + invalid;
