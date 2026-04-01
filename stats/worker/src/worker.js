@@ -5,7 +5,8 @@
  *
  * Routes:
  *   GET /                  -> Stats dashboard HTML
- *   GET /dispatcher.json   -> Latest stats from KV
+ *   GET /dispatcher.json   -> Dispatcher stats from KV (key: DOGE_STATS)
+ *   GET /pool.json         -> Pool stats from KV (key: DOGE_POOL)
  *   GET /favicon.svg       -> Favicon
  */
 
@@ -222,7 +223,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             <div class="card-value" id="queueStratum">--</div>
         </div>
     </div>
-    <div class="section-title">Solutions</div>
+    <div class="section-title">Dispatcher Solutions</div>
     <div class="bar-container">
         <div class="bar-row">
             <div class="bar-label">Received</div>
@@ -264,6 +265,39 @@ const HTML_PAGE = `<!DOCTYPE html>
             <div class="card-value accepted" id="acceptRate">--</div>
         </div>
     </div>
+    <div class="section-title">Solo Pool</div>
+    <div class="grid">
+        <div class="card">
+            <div class="card-label">Blocks Found</div>
+            <div class="card-value hashrate" id="blocksFound">--</div>
+            <div class="card-sub" id="blocksConfirmed"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Pool Shares</div>
+            <div class="card-value accepted" id="poolSharesValid">--</div>
+            <div class="card-sub" id="poolSharesInvalid"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Last Block</div>
+            <div class="card-value" id="lastBlockHeight" style="font-size:1.1em">--</div>
+            <div class="card-sub" id="lastBlockTime"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Share Rate</div>
+            <div class="card-value" id="shareRate" style="font-size:1.1em">--</div>
+            <div class="card-sub">shares/min</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Invalid Rate</div>
+            <div class="card-value rejected" id="invalidRate" style="font-size:1.1em">--</div>
+        </div>
+    </div>
+    <div id="recentBlocksSection" style="display:none">
+        <div class="section-title">Recent Blocks</div>
+        <div class="bar-container" id="recentBlocksList" style="font-size:0.75em; line-height:1.8">
+        </div>
+    </div>
+
     <div class="footer">
         <p>Source: <a href="https://github.com/qubic/doge-connect">github.com/qubic/doge-connect</a></p>
     </div>
@@ -328,8 +362,71 @@ const HTML_PAGE = `<!DOCTYPE html>
                 }
             }
         }
+        function timeAgo(ts) {
+            if (!ts) return '--';
+            const ms = typeof ts === 'string' ? new Date(ts).getTime() : (ts > 1e12 ? ts : ts * 1000);
+            if (isNaN(ms)) return '--';
+            const sec = Math.floor((Date.now() - ms) / 1000);
+            if (sec < 0) return 'just now';
+            if (sec < 60) return sec + 's ago';
+            if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+            if (sec < 86400) return Math.floor(sec/3600) + 'h ' + Math.floor((sec%3600)/60) + 'm ago';
+            return Math.floor(sec/86400) + 'd ago';
+        }
+
+        async function fetchPoolStats() {
+            try {
+                const r = await fetch('/pool.json?t=' + Date.now());
+                if (!r.ok) return;
+                const p = await r.json();
+                // Support both flat format (sharesValid) and nested format (shares.valid)
+                const valid = p.sharesValid ?? (p.shares && p.shares.valid) ?? null;
+                const invalid = p.sharesInvalid ?? (p.shares && p.shares.invalid) ?? 0;
+                const found = p.blocksFound ?? (p.blocks && p.blocks.found) ?? 0;
+                const confirmed = p.blocksConfirmed ?? (p.blocks && p.blocks.confirmed) ?? 0;
+                if (valid === null) return;
+
+                document.getElementById('blocksFound').textContent = found;
+                document.getElementById('blocksConfirmed').textContent = confirmed + ' confirmed';
+                document.getElementById('poolSharesValid').textContent = formatNumber(valid);
+                document.getElementById('poolSharesInvalid').textContent = invalid + ' invalid';
+
+                const lastBlock = p.lastBlock || (p.lastBlockHeight ? p : null);
+                if (lastBlock && (lastBlock.height || lastBlock.lastBlockHeight)) {
+                    const h = lastBlock.height || lastBlock.lastBlockHeight;
+                    document.getElementById('lastBlockHeight').textContent = '#' + formatNumber(h);
+                    document.getElementById('lastBlockTime').textContent = timeAgo(lastBlock.time || lastBlock.lastBlockTime || p.lastBlockTime);
+                }
+
+                // Share rate: shares per minute based on uptime
+                const uptime = p.uptime || 0;
+                if (uptime > 0) {
+                    const spm = (valid / uptime * 60).toFixed(1);
+                    document.getElementById('shareRate').textContent = spm;
+                }
+
+                // Invalid rate
+                const total = valid + invalid;
+                document.getElementById('invalidRate').textContent = total > 0 ? (invalid / total * 100).toFixed(2) + '%' : '0%';
+
+                if (p.recentBlocks && p.recentBlocks.length > 0) {
+                    document.getElementById('recentBlocksSection').style.display = '';
+                    const list = document.getElementById('recentBlocksList');
+                    list.innerHTML = p.recentBlocks.map(b =>
+                        '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e3a50">' +
+                        '<span style="color:#f59e0b">#' + b.height + '</span>' +
+                        '<span style="color:' + (b.confirmed ? '#22c55e' : '#f59e0b') + '">' + (b.confirmed ? 'confirmed' : 'pending') + '</span>' +
+                        '<span style="color:#6b7280">' + new Date(b.time).toLocaleString() + '</span>' +
+                        '</div>'
+                    ).join('');
+                }
+            } catch(e) {}
+        }
+
         fetchStats();
+        fetchPoolStats();
         setInterval(fetchStats, POLL_INTERVAL);
+        setInterval(fetchPoolStats, POLL_INTERVAL);
     </script>
 </body>
 </html>`;
@@ -338,9 +435,21 @@ export default {
     async fetch(request, env) {
         const url = new URL(request.url);
 
-        // GET /dispatcher.json -- serve stats from KV (namespace: stats, key: DOGE_STATS)
+        // GET /dispatcher.json -- serve dispatcher stats from KV
         if (url.pathname === '/dispatcher.json') {
             const data = await env.stats.get('DOGE_STATS');
+            return new Response(data || '{}', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache, max-age=0',
+                }
+            });
+        }
+
+        // GET /pool.json -- serve pool stats from KV
+        if (url.pathname === '/pool.json') {
+            const data = await env.stats.get('DOGE_POOL');
             return new Response(data || '{}', {
                 headers: {
                     'Content-Type': 'application/json',
