@@ -273,14 +273,14 @@ const HTML_PAGE = `<!DOCTYPE html>
             <div class="card-sub" id="blocksConfirmed"></div>
         </div>
         <div class="card">
-            <div class="card-label">Pool Shares</div>
-            <div class="card-value accepted" id="poolSharesValid">--</div>
-            <div class="card-sub" id="poolSharesInvalid"></div>
-        </div>
-        <div class="card">
             <div class="card-label">Last Block</div>
             <div class="card-value" id="lastBlockHeight" style="font-size:1.1em">--</div>
             <div class="card-sub" id="lastBlockTime"></div>
+        </div>
+        <div class="card">
+            <div class="card-label">Pool Shares</div>
+            <div class="card-value accepted" id="poolSharesValid">--</div>
+            <div class="card-sub" id="poolSharesInvalid"></div>
         </div>
         <div class="card">
             <div class="card-label">Share Rate</div>
