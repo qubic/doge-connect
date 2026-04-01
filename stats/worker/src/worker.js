@@ -459,6 +459,48 @@ export default {
             });
         }
 
+        // GET /poolstats.json -- combined stats for miningpoolstats.stream
+        if (url.pathname === '/poolstats.json') {
+            const dispRaw = await env.stats.get('DOGE_STATS');
+            const poolRaw = await env.stats.get('DOGE_POOL');
+            const disp = dispRaw ? JSON.parse(dispRaw) : {};
+            const pool = poolRaw ? JSON.parse(poolRaw) : {};
+
+            const hashrate = disp.mining ? disp.mining.hashrate || 0 : 0;
+            const shares = pool.shares ? pool.shares.valid || pool.sharesValid || 0 : pool.sharesValid || 0;
+            const blocks = pool.blocks ? pool.blocks.found || pool.blocksFound || 0 : pool.blocksFound || 0;
+            const lastBlock = pool.lastBlock || {};
+            const blockHeight = lastBlock.height || pool.lastBlockHeight || 0;
+
+            const lastBlockTime = lastBlock.time || pool.lastBlockTime || pool.lastShare || null;
+            const lastBlockTs = lastBlockTime
+                ? Math.floor((typeof lastBlockTime === 'string' ? new Date(lastBlockTime).getTime() : (lastBlockTime > 1e12 ? lastBlockTime : lastBlockTime * 1000)) / 1000)
+                : 0;
+
+            const data = {
+                name: "qubic.org",
+                dashboard: "https://doge-stats.qubic.org",
+                users: 1,
+                workers: 1,
+                fee: 0,
+                minFee: 0,
+                maxFee: 0,
+                hashrate: hashrate,
+                shares: shares,
+                blocks: blocks,
+                blockHeight: blockHeight,
+                lastBlockTime: lastBlockTs,
+            };
+
+            return new Response(JSON.stringify(data, null, 2), {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*',
+                    'Cache-Control': 'no-cache, max-age=0',
+                }
+            });
+        }
+
         // GET /favicon.svg
         if (url.pathname === '/favicon.svg' || url.pathname === '/favicon.ico') {
             return new Response(FAVICON_SVG, {
