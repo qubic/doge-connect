@@ -160,10 +160,9 @@ void shareValidationLoop(
             continue;
         }
 
-        // Debug: log header immediately before scrypt to confirm input bytes.
-        LOG() << "shareValidationLoop: scrypt input=" << bytesToHex(std::span<const uint8_t>(fullHeader.data(), 80), ByteArrayFormat::BigEndian) << std::endl;
+        DBG() << "shareValidationLoop: scrypt input=" << bytesToHex(std::span<const uint8_t>(fullHeader.data(), 80), ByteArrayFormat::BigEndian) << std::endl;
         scrypt_1024_1_1_256(reinterpret_cast<char*>(fullHeader.data()), reinterpret_cast<char*>(scryptHash.data()));
-        LOG() << "shareValidationLoop: scrypt output=" << bytesToHex(scryptHash, ByteArrayFormat::BigEndian) << std::endl;
+        DBG() << "shareValidationLoop: scrypt output=" << bytesToHex(scryptHash, ByteArrayFormat::BigEndian) << std::endl;
 
         uint64_t solDiff = hashDifficulty(scryptHash);
         std::string minerId = shortIdentity(sol.sourcePublicKey);
@@ -174,15 +173,15 @@ void shareValidationLoop(
         if (!verifyHashVsTarget(scryptHash, task.targetPool))
         {
             LOG() << "shareValidationLoop: Solution from " << minerId << " comp " << computorIdx << " job " << sol.jobId
-                << " FAILED pool diff (hash diff " << solDiff << ", required " << stats.poolDifficulty.load() << ")."
-                << " hash=" << bytesToHex(scryptHash, ByteArrayFormat::LittleEndian)
+                << " FAILED pool diff (hash diff " << solDiff << ", required " << stats.poolDifficulty.load() << ")." << std::endl;
+            DBG() << "  hash=" << bytesToHex(scryptHash, ByteArrayFormat::LittleEndian)
                 << " header=" << bytesToHex(std::span<const uint8_t>(fullHeader.data(), 80), ByteArrayFormat::BigEndian)
                 << std::endl;
             stats.solutionsRejected++;
             continue;
         }
 
-        LOG() << "shareValidationLoop: Solution from " << minerId << " comp " << computorIdx
+        DBG() << "shareValidationLoop: Solution from " << minerId << " comp " << computorIdx
             << " job " << sol.jobId << " (pool " << task.taskId << ")"
             << " PASSED pool diff (" << solDiff << ")." << std::endl;
         stats.solutionsAccepted++;
@@ -204,7 +203,7 @@ void shareValidationLoop(
                 bytesToHex(sol.nonce, ByteArrayFormat::LittleEndian)
             };
 
-            LOG() << "shareValidationLoop: Submitting to pool: " << message.dump() << std::endl;
+            DBG() << "shareValidationLoop: Submitting to pool: " << message.dump() << std::endl;
 
             // Stratum messages need to end with newline.
             connection.sendMessage(message.dump() + "\n");

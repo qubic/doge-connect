@@ -219,7 +219,7 @@ void checkShareResponse(const nlohmann::json& msg, DispatcherStats& stats)
         // Share was accepted.
         // Example JSON: {"id": 4, "result": true, "error": null}
         stats.poolSharesAccepted++;
-        LOG() << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
+        DBG() << "Share with submission id " << shareId << " was accepted by pool." << std::endl;
     }
     else
     {

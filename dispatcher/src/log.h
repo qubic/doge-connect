@@ -69,3 +69,16 @@ private:
 
 inline logging::LogStream LOG() { return logging::LogStream(std::cout); }
 inline logging::LogStream ERR() { return logging::LogStream(std::cerr); }
+
+// Debug logging: compiled out by default. Enable with -DENABLE_DEBUG_LOG.
+// Usage: DBG() << "verbose info" << std::endl;
+#ifdef ENABLE_DEBUG_LOG
+inline logging::LogStream DBG() { return logging::LogStream(std::cout); }
+#else
+class NullStream {
+public:
+    template <typename T> NullStream& operator<<(const T&) { return *this; }
+    NullStream& operator<<(std::ostream& (*)(std::ostream&)) { return *this; }
+};
+inline NullStream DBG() { return NullStream(); }
+#endif
