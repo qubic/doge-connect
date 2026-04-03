@@ -12,6 +12,21 @@ constexpr uint8_t SIGNATURE_SIZE = 64;
  */
 constexpr unsigned int NUM_COMPUTORS = 676;
 
+/**
+ * @brief Per-peer statistics for qubic network connections.
+ */
+struct PeerStats
+{
+    std::string ip;
+    int port = 0;
+    std::atomic<uint64_t> reconnects{0};
+    std::atomic<uint64_t> solutionsReceived{0};
+    std::atomic<uint64_t> packetsReceived{0};
+    std::atomic<uint64_t> bytesReceived{0};
+    std::atomic<uint64_t> disconnects{0};
+    std::atomic<uint64_t> sendFailures{0};
+};
+
 struct DispatcherStats
 {
     std::atomic<uint64_t> tasksDistributed{0};
@@ -26,6 +41,8 @@ struct DispatcherStats
 
     // Per-computor share counters (accepted solutions only).
     std::array<std::atomic<uint64_t>, NUM_COMPUTORS> computorShares{};
+    // Per-computor last share timestamp (seconds since epoch).
+    std::array<std::atomic<int64_t>, NUM_COMPUTORS> computorLastSeen{};
 };
 
 enum CustomMiningType : uint8_t

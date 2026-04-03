@@ -125,6 +125,9 @@ int main(int argc, char* argv[])
     ConcurrentQueue<DispatcherMiningSolution> recvQubicSolutions;
     ConcurrentHashMap<uint64_t, DispatcherMiningTask> activeTasks;
 
+    // Per-peer statistics (same size as qubicConnections).
+    std::vector<PeerStats> peerStats(config.qubic.ips.size());
+
     std::vector<uint8_t> extraNonce1;
 
     if (!initStratumProtocol(stratumConnection, recvStratumMessages, extraNonce1,
@@ -160,7 +163,7 @@ int main(int argc, char* argv[])
     {
         taskDistThread.emplace(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
             std::ref(poolCurrentDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
-        qubicRecvThread.emplace(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
+        qubicRecvThread.emplace(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections), std::ref(peerStats));
         shareValidThread.emplace(shareValidationLoop, std::ref(recvQubicSolutions), std::ref(activeTasks),
             std::ref(nextStratumSendId), std::ref(stratumConnection), config.pool.workerName, std::ref(stats));
     }
@@ -321,13 +324,25 @@ int main(int argc, char* argv[])
 
             // Per-computor share counts (only include non-zero entries).
             nlohmann::json compShares = nlohmann::json::object();
+            int64_t nowEpoch = std::chrono::duration_cast<std::chrono::seconds>(
+                std::chrono::system_clock::now().time_since_epoch()).count();
+            unsigned int activeLastHour = 0;
+            unsigned int activeTotal = 0;
             for (unsigned int i = 0; i < NUM_COMPUTORS; ++i)
             {
                 uint64_t count = stats.computorShares[i].load();
                 if (count > 0)
+                {
                     compShares[std::to_string(i)] = count;
+                    activeTotal++;
+                    int64_t lastSeen = stats.computorLastSeen[i].load();
+                    if (lastSeen > 0 && (nowEpoch - lastSeen) < 3600)
+                        activeLastHour++;
+                }
             }
             statsJson["computor_shares"] = compShares;
+            statsJson["computors_active"] = activeTotal;
+            statsJson["computors_active_1h"] = activeLastHour;
 
             // Write atomically: write to tmp file then rename.
             std::string tmpPath = config.statsFile + ".tmp";
@@ -337,6 +352,43 @@ int main(int argc, char* argv[])
                 out << statsJson.dump(2) << std::endl;
                 out.close();
                 std::rename(tmpPath.c_str(), config.statsFile.c_str());
+            }
+
+            // Write peer stats to peerstats.json alongside the main stats file.
+            std::string peerStatsPath = config.statsFile;
+            auto lastSlash = peerStatsPath.rfind('/');
+            if (lastSlash != std::string::npos)
+                peerStatsPath = peerStatsPath.substr(0, lastSlash + 1) + "peerstats.json";
+            else
+                peerStatsPath = "peerstats.json";
+
+            nlohmann::json peerStatsJson = nlohmann::json::array();
+            for (const auto& ps : peerStats)
+            {
+                if (ps.ip.empty()) continue;
+                peerStatsJson.push_back({
+                    {"ip", ps.ip},
+                    {"port", ps.port},
+                    {"connected", false}, // will be updated below
+                    {"reconnects", ps.reconnects.load()},
+                    {"disconnects", ps.disconnects.load()},
+                    {"solutions_received", ps.solutionsReceived.load()},
+                    {"packets_received", ps.packetsReceived.load()},
+                    {"bytes_received", ps.bytesReceived.load()},
+                    {"send_failures", ps.sendFailures.load()}
+                });
+            }
+            // Update connected status from live connections.
+            for (size_t i = 0; i < qubicConnections.size() && i < peerStatsJson.size(); ++i)
+                peerStatsJson[i]["connected"] = qubicConnections[i].isConnected();
+
+            std::string peerTmpPath = peerStatsPath + ".tmp";
+            std::ofstream peerOut(peerTmpPath);
+            if (peerOut.is_open())
+            {
+                peerOut << peerStatsJson.dump(2) << std::endl;
+                peerOut.close();
+                std::rename(peerTmpPath.c_str(), peerStatsPath.c_str());
             }
         }
     }

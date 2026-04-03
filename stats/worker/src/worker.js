@@ -259,7 +259,7 @@ const HTML_PAGE = `<!DOCTYPE html>
         <div class="card">
             <div class="card-label">Active Computors</div>
             <div class="card-value" id="activeComputors">--</div>
-            <div class="card-sub">of 676</div>
+            <div class="card-sub">of 676 (last hour)</div>
         </div>
     </div>
     <div class="section-title">Network</div>
@@ -397,8 +397,7 @@ const HTML_PAGE = `<!DOCTYPE html>
                 document.getElementById('difficulty').textContent = formatNumber(d.mining.pool_difficulty);
                 document.getElementById('tasks').textContent = formatNumber(d.mining.tasks_distributed);
                 document.getElementById('activeTasks').textContent = d.active_tasks;
-                const compShares = d.computor_shares || {};
-                document.getElementById('activeComputors').textContent = Object.keys(compShares).length;
+                document.getElementById('activeComputors').textContent = d.computors_active_1h ?? Object.keys(d.computor_shares || {}).length;
                 document.getElementById('peers').textContent = d.network.connected_peers + ' / ' + d.network.total_peers;
                 const pp = d.network.total_peers > 0 ? Math.round(d.network.connected_peers/d.network.total_peers*100) : 0;
                 document.getElementById('peersSub').textContent = pp + '% connected';

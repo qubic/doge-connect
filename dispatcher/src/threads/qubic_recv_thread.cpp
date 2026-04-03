@@ -82,7 +82,7 @@ void processSolution(char* recvData, unsigned int packetSize, ConcurrentQueue<Di
 
 // Parse complete packets from a stream buffer using RequestResponseHeader framing.
 // Calls processSolution for each complete packet, then removes consumed bytes from the buffer.
-static void processRecvBuffer(std::vector<char>& buf, ConcurrentQueue<DispatcherMiningSolution>& queue)
+static void processRecvBuffer(std::vector<char>& buf, ConcurrentQueue<DispatcherMiningSolution>& queue, PeerStats& ps)
 {
     unsigned int pos = 0;
     while (pos + sizeof(RequestResponseHeader) <= buf.size())
@@ -101,7 +101,11 @@ static void processRecvBuffer(std::vector<char>& buf, ConcurrentQueue<Dispatcher
         if (pos + packetSize > buf.size())
             break;
 
+        ps.packetsReceived++;
+        size_t queueSizeBefore = queue.size();
         processSolution(buf.data() + pos, packetSize, queue);
+        if (queue.size() > queueSizeBefore)
+            ps.solutionsReceived++;
         pos += packetSize;
     }
 
@@ -157,18 +161,19 @@ struct ReconnectState
 };
 
 // Mark a connection as disconnected and schedule a reconnect attempt.
-static void markDisconnected(QubicConnection& conn, std::vector<char>& recvBuf, ReconnectState& rs, const char* reason)
+static void markDisconnected(QubicConnection& conn, std::vector<char>& recvBuf, ReconnectState& rs, PeerStats& ps, const char* reason)
 {
     ERR() << "qubicReceiveLoop: Connection to " << conn.getPeerIp() << " lost (" << reason << ")." << std::endl;
     conn.closeConnection();
     recvBuf.clear();
     rs.scheduleRetry();
+    ps.disconnects++;
     LOG() << "qubicReceiveLoop: Will reconnect to " << conn.getPeerIp() << " in " << rs.delaySec << "s." << std::endl;
 }
 
 // Try ONE pending reconnect per call (to avoid blocking the recv loop for too long).
 // Returns true if a connection was (re)established.
-static bool tryOneReconnect(std::vector<QubicConnection>& connections, std::vector<ReconnectState>& reconnectStates, size_t& nextReconnIdx)
+static bool tryOneReconnect(std::vector<QubicConnection>& connections, std::vector<ReconnectState>& reconnectStates, std::vector<PeerStats>& peerStats, size_t& nextReconnIdx)
 {
     // Scan from where we left off to find the next ready connection.
     for (size_t scanned = 0; scanned < connections.size(); ++scanned)
@@ -184,6 +189,7 @@ static bool tryOneReconnect(std::vector<QubicConnection>& connections, std::vect
         {
             LOG() << "qubicReceiveLoop: Reconnected to " << connections[i].getPeerIp() << ":" << connections[i].getPeerPort() << "." << std::endl;
             rs.reset();
+            peerStats[i].reconnects++;
             return true;
         }
         else
@@ -198,13 +204,20 @@ static bool tryOneReconnect(std::vector<QubicConnection>& connections, std::vect
     return false;
 }
 
-void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSolution>& queue, std::vector<QubicConnection>& connections)
+void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSolution>& queue, std::vector<QubicConnection>& connections, std::vector<PeerStats>& peerStats)
 {
     std::array<char, 4096> readBuf;
 
     // Per-connection stream buffer for reassembling packets from the TCP byte stream.
     std::vector<std::vector<char>> recvBuffers(connections.size());
     std::vector<ReconnectState> reconnectStates(connections.size());
+
+    // Initialize peer stats with IP/port.
+    for (size_t i = 0; i < connections.size(); ++i)
+    {
+        peerStats[i].ip = connections[i].getPeerIp();
+        peerStats[i].port = connections[i].getPeerPort();
+    }
 
     // Schedule immediate connect for any connections that aren't already connected.
     for (size_t i = 0; i < connections.size(); ++i)
@@ -225,7 +238,7 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
     while (!st.stop_requested())
     {
         // Try one pending reconnect per cycle to avoid blocking the recv loop.
-        if (tryOneReconnect(connections, reconnectStates, nextReconnIdx))
+        if (tryOneReconnect(connections, reconnectStates, peerStats, nextReconnIdx))
             buildPollList(connections, socketPollList, pollToConnIdx);
 
         if (socketPollList.empty())
@@ -252,19 +265,20 @@ void qubicReceiveLoop(std::stop_token st, ConcurrentQueue<DispatcherMiningSoluti
 
                     if (recvBytes > 0)
                     {
+                        peerStats[connIdx].bytesReceived += recvBytes;
                         recvBuffers[connIdx].insert(recvBuffers[connIdx].end(), readBuf.data(), readBuf.data() + recvBytes);
-                        processRecvBuffer(recvBuffers[connIdx], queue);
+                        processRecvBuffer(recvBuffers[connIdx], queue, peerStats[connIdx]);
                     }
                     else
                     {
-                        markDisconnected(connections[connIdx], recvBuffers[connIdx], reconnectStates[connIdx],
+                        markDisconnected(connections[connIdx], recvBuffers[connIdx], reconnectStates[connIdx], peerStats[connIdx],
                             (std::string("recv returned ") + std::to_string(recvBytes)).c_str());
                         needRebuild = true;
                     }
                 }
                 else if (pd.revents & (POLLERR | POLLHUP))
                 {
-                    markDisconnected(connections[connIdx], recvBuffers[connIdx], reconnectStates[connIdx], "POLLERR|POLLHUP");
+                    markDisconnected(connections[connIdx], recvBuffers[connIdx], reconnectStates[connIdx], peerStats[connIdx], "POLLERR|POLLHUP");
                     needRebuild = true;
                 }
             }

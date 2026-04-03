@@ -130,7 +130,8 @@ int main(int argc, char* argv[])
     std::jthread taskDistThread(taskDistributionLoop, std::ref(recvStratumMessages), std::ref(activeTasks), std::ref(qubicConnections), std::ref(poolBaseDifficulty),
         std::ref(poolCurrentDifficulty), std::ref(extraNonce1), std::ref(signingCtx), std::ref(stats));
     // Start the qubicRecvThread to receive solutions from the qubic network.
-    std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections));
+    std::vector<PeerStats> peerStats(qubicConnections.size());
+    std::jthread qubicRecvThread(qubicReceiveLoop, std::ref(recvQubicSolutions), std::ref(qubicConnections), std::ref(peerStats));
     // Start the shareValidThread to validate received solutions. The test dispatcher does not submit to a pool, so fill data with dummies.
     std::atomic<uint64_t> nextStratumSendId = 3; // ids 1 and 2 were already used for protocol initialization
     Connection dummyStratumConnection;
