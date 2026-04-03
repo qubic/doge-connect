@@ -125,7 +125,13 @@ void shareValidationLoop(
         std::optional<DispatcherMiningTask> taskOptional = activeTasks.get(sol.jobId);
         if (!taskOptional.has_value())
         {
-            LOG() << "shareValidationLoop: Ignoring stale submitted solution (dispatcher jobId " << sol.jobId << ")." << std::endl;
+            std::string minerId = shortIdentity(sol.sourcePublicKey);
+            uint32_t en2High = (sol.extraNonce2[0] << 24) | (sol.extraNonce2[1] << 16) | (sol.extraNonce2[2] << 8) | sol.extraNonce2[3];
+            LOG() << "shareValidationLoop: Stale solution from " << minerId
+                << " comp " << (en2High % 676)
+                << " jobId " << sol.jobId
+                << " (not in activeTasks, " << activeTasks.size() << " active)"
+                << std::endl;
             stats.solutionsStale++;
             continue;
         }
