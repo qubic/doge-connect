@@ -191,6 +191,8 @@ void shareValidationLoop(
             << " job " << sol.jobId << " (pool " << task.taskId << ")"
             << " PASSED pool diff (" << solDiff << ")." << std::endl;
         stats.solutionsAccepted++;
+        if (computorIdx < NUM_COMPUTORS)
+            stats.computorShares[computorIdx]++;
         stats.solutionsPassedPoolDiff++;
         recentSubmits.insert(dedupeKey);
 

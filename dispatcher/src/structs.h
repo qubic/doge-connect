@@ -10,6 +10,8 @@ constexpr uint8_t SIGNATURE_SIZE = 64;
 /**
  * @brief Shared statistics counters for monitoring the dispatcher at runtime.
  */
+constexpr unsigned int NUM_COMPUTORS = 676;
+
 struct DispatcherStats
 {
     std::atomic<uint64_t> tasksDistributed{0};
@@ -21,6 +23,9 @@ struct DispatcherStats
     std::atomic<uint64_t> poolSharesAccepted{0};
     std::atomic<uint64_t> poolSharesRejected{0};
     std::atomic<uint64_t> poolDifficulty{1};
+
+    // Per-computor share counters (accepted solutions only).
+    std::array<std::atomic<uint64_t>, NUM_COMPUTORS> computorShares{};
 };
 
 enum CustomMiningType : uint8_t

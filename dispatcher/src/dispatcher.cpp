@@ -286,6 +286,16 @@ int main(int argc, char* argv[])
                 {"active_tasks", activeTasks.size()}
             };
 
+            // Per-computor share counts (only include non-zero entries).
+            nlohmann::json compShares = nlohmann::json::object();
+            for (unsigned int i = 0; i < NUM_COMPUTORS; ++i)
+            {
+                uint64_t count = stats.computorShares[i].load();
+                if (count > 0)
+                    compShares[std::to_string(i)] = count;
+            }
+            statsJson["computor_shares"] = compShares;
+
             // Write atomically: write to tmp file then rename.
             std::string tmpPath = config.statsFile + ".tmp";
             std::ofstream out(tmpPath);
