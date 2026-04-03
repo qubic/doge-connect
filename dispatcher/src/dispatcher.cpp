@@ -193,11 +193,18 @@ int main(int argc, char* argv[])
 
     auto startTime = std::chrono::steady_clock::now();
 
-    // Hashrate estimation using a rolling window of accepted solutions.
-    auto hashrateWindowStart = std::chrono::steady_clock::now();
-    uint64_t windowStartAccepted = 0;
-    double estimatedHashrate = 0.0;
+    // Hashrate estimation using rolling windows.
     constexpr double hashrateWindowSec = 300.0; // 5-minute rolling window
+
+    // Incoming hashrate: based on dispatcher-accepted solutions (before pool validation).
+    auto incomingWindowStart = std::chrono::steady_clock::now();
+    uint64_t incomingWindowStartAccepted = 0;
+    double incomingHashrate = 0.0;
+
+    // Pool hashrate: based on pool-confirmed shares (after pool validation).
+    auto poolWindowStart = std::chrono::steady_clock::now();
+    uint64_t poolWindowStartAccepted = 0;
+    double poolHashrate = 0.0;
 
     while (keepRunning)
     {
@@ -208,40 +215,64 @@ int main(int argc, char* argv[])
         for (const auto& qc : qubicConnections)
             if (qc.isConnected()) connectedPeers++;
 
-        // Calculate hashrate over a rolling window.
+        // Calculate hashrates over rolling windows.
         // For scrypt with 0x1f base: hashes_per_share = diff * 65536.
         auto now = std::chrono::steady_clock::now();
-        double elapsedSec = std::chrono::duration<double>(now - hashrateWindowStart).count();
-        uint64_t currentAccepted = stats.solutionsAccepted.load();
         double currentDiff = static_cast<double>(stats.poolDifficulty.load());
-        uint64_t windowShares = currentAccepted - windowStartAccepted;
 
-        if (elapsedSec > 0 && windowShares > 0)
-            estimatedHashrate = static_cast<double>(windowShares) * currentDiff * 65536.0 / elapsedSec;
-
-        // Reset window periodically to avoid stale data dominating.
-        if (elapsedSec >= hashrateWindowSec)
+        // Incoming hashrate (dispatcher-accepted solutions).
         {
-            hashrateWindowStart = now;
-            windowStartAccepted = currentAccepted;
+            double elapsed = std::chrono::duration<double>(now - incomingWindowStart).count();
+            uint64_t current = stats.solutionsAccepted.load();
+            uint64_t shares = current - incomingWindowStartAccepted;
+            if (elapsed > 0)
+            {
+                incomingHashrate = shares > 0
+                    ? static_cast<double>(shares) * currentDiff * 65536.0 / elapsed
+                    : (elapsed >= hashrateWindowSec ? 0.0 : incomingHashrate);
+            }
+            if (elapsed >= hashrateWindowSec)
+            {
+                incomingWindowStart = now;
+                incomingWindowStartAccepted = current;
+            }
+        }
+
+        // Pool hashrate (pool-confirmed shares).
+        {
+            double elapsed = std::chrono::duration<double>(now - poolWindowStart).count();
+            uint64_t current = stats.poolSharesAccepted.load();
+            uint64_t shares = current - poolWindowStartAccepted;
+            if (elapsed > 0)
+            {
+                poolHashrate = shares > 0
+                    ? static_cast<double>(shares) * currentDiff * 65536.0 / elapsed
+                    : (elapsed >= hashrateWindowSec ? 0.0 : poolHashrate);
+            }
+            if (elapsed >= hashrateWindowSec)
+            {
+                poolWindowStart = now;
+                poolWindowStartAccepted = current;
+            }
         }
 
         // Format hashrate with appropriate unit.
-        std::string hrStr;
-        if (estimatedHashrate >= 1e12)
-            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e12)) + " TH/s";
-        else if (estimatedHashrate >= 1e9)
-            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e9)) + " GH/s";
-        else if (estimatedHashrate >= 1e6)
-            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e6)) + " MH/s";
-        else if (estimatedHashrate >= 1e3)
-            hrStr = std::to_string(static_cast<int>(estimatedHashrate / 1e3)) + " KH/s";
-        else
-            hrStr = std::to_string(static_cast<int>(estimatedHashrate)) + " H/s";
+        auto fmtHr = [](double val) -> std::string {
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(1);
+            if (val >= 1e12) oss << val / 1e12 << " TH/s";
+            else if (val >= 1e9) oss << val / 1e9 << " GH/s";
+            else if (val >= 1e6) oss << val / 1e6 << " MH/s";
+            else if (val >= 1e3) oss << val / 1e3 << " KH/s";
+            else oss << static_cast<int>(val) << " H/s";
+            return oss.str();
+        };
+        std::string incomingHrStr = fmtHr(incomingHashrate);
+        std::string poolHrStr = fmtHr(poolHashrate);
 
         LOG() << "[status] net: " << connectedPeers << "/" << qubicConnections.size()
             << " | diff: " << stats.poolDifficulty.load()
-            << " | hr: " << hrStr
+            << " | hr: " << incomingHrStr << " (pool: " << poolHrStr << ")"
             << " | tasks: " << stats.tasksDistributed
             << " | sol recv/acc/rej/stale: " << stats.solutionsReceived << "/" << stats.solutionsAccepted << "/" << stats.solutionsRejected << "/" << stats.solutionsStale
             << " | pool: " << stats.solutionsPassedPoolDiff << " (acc/rej: " << stats.poolSharesAccepted << "/" << stats.poolSharesRejected << ")"
@@ -263,8 +294,10 @@ int main(int argc, char* argv[])
                     {"total_peers", qubicConnections.size()}
                 }},
                 {"mining", {
-                    {"hashrate", static_cast<uint64_t>(estimatedHashrate)},
-                    {"hashrate_display", hrStr},
+                    {"hashrate", static_cast<uint64_t>(incomingHashrate)},
+                    {"hashrate_display", incomingHrStr},
+                    {"pool_hashrate", static_cast<uint64_t>(poolHashrate)},
+                    {"pool_hashrate_display", poolHrStr},
                     {"pool_difficulty", stats.poolDifficulty.load()},
                     {"tasks_distributed", stats.tasksDistributed.load()}
                 }},

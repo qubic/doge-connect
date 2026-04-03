@@ -180,6 +180,56 @@ const HTML_PAGE = `<!DOCTYPE html>
         Qubic's distributed computational power mining Dogecoin.
         Tasks are distributed via the Qubic network to computors, and solutions are submitted to the mining pool.
     </p>
+
+    <div class="bar-container" style="margin-bottom:30px">
+        <div style="display:flex;align-items:center;cursor:pointer;gap:8px" onclick="document.getElementById('poolInfo').style.display=document.getElementById('poolInfo').style.display==='none'?'block':'none';this.querySelector('.arrow').textContent=document.getElementById('poolInfo').style.display==='none'?'\u25B6':'\u25BC'">
+            <span class="arrow" style="color:#f59e0b;font-size:0.8em">\u25B6</span>
+            <span class="section-title" style="margin:0;cursor:pointer">How to Mine DOGE with Qubic</span>
+        </div>
+        <div id="poolInfo" style="display:none;margin-top:15px">
+            <p style="color:#9ca3af;font-size:0.8em;line-height:1.7;margin-bottom:15px">
+                Qubic is a decentralized network of 676 computors and its associated miners. Each computor group can contribute its computational power to mine Dogecoin.
+                Multiple independent mining pools connect to the Qubic network, and their combined hashrate forms the <strong style="color:#e5e7eb">qubic.org DOGE pool</strong>.
+            </p>
+            <p style="color:#9ca3af;font-size:0.8em;line-height:1.7;margin-bottom:20px">
+                To start mining, you need a <strong style="color:#e5e7eb">Qubic address</strong> as your worker identity or Payout address.
+                Create one using any of the <a href="https://qubic.org/#wallets">official wallets</a>.
+                For help, join our <a href="https://discord.gg/qubic">Discord server</a>.
+            </p>
+            <div class="section-title" style="font-size:0.75em;margin-bottom:10px">Available Pools</div>
+            <div style="display:grid;gap:12px">
+                <div style="background:#0d1a24;border:1px solid #1e3a50;border-radius:6px;padding:14px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <strong style="color:#f59e0b;font-size:0.9em">apool</strong>
+                        <div style="display:flex;gap:10px;font-size:0.7em">
+                            <a href="https://apool.top">Website</a>
+                            <a href="https://apool.gitbook.io/help/doge-pool-tutorial/doge-mining-tutorial">Setup Guide</a>
+                        </div>
+                    </div>
+                    <div style="font-size:0.85em;color:#6b7280;line-height:2">
+                        <div><span style="color:#9ca3af">Main Stratum:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">stratum+tcp://doge.asia.apool.io:3334</code></div>
+                        <div><span style="color:#9ca3af">Username:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">your apool subaccount</code></div>
+                        <div><span style="color:#9ca3af">Password:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">(empty)</code></div>
+                    </div>
+                </div>
+                <div style="background:#0d1a24;border:1px solid #1e3a50;border-radius:6px;padding:14px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <strong style="color:#f59e0b;font-size:0.9em">QLI (qubic.li)</strong>
+                        <div style="display:flex;gap:10px;font-size:0.7em">
+                            <a href="https://platform.qubic.li">Website</a>
+                            <a href="https://github.com/qubic-li/.github/blob/main/profile/doge-scrypt-on%20qubic.md">Setup Guide</a>
+                        </div>
+                    </div>
+                    <div style="font-size:0.85em;color:#6b7280;line-height:2">
+                        <div><span style="color:#9ca3af">Main Stratum:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">stratum+tcp://doge.qubic.li:12480</code></div>
+                        <div><span style="color:#9ca3af">Username:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">&lt;QUBIC_ADDRESS&gt;.workerName</code></div>
+                        <div><span style="color:#9ca3af">Password:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">(empty)</code> or e.g. <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">d=153000000</code> to set a starting difficulty</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="status-bar">
         <div class="status-dot" id="statusDot"></div>
         <div class="status-text">
@@ -205,6 +255,11 @@ const HTML_PAGE = `<!DOCTYPE html>
         <div class="card">
             <div class="card-label">Active Tasks</div>
             <div class="card-value" id="activeTasks">--</div>
+        </div>
+        <div class="card">
+            <div class="card-label">Active Computors</div>
+            <div class="card-value" id="activeComputors">--</div>
+            <div class="card-sub">of 676</div>
         </div>
     </div>
     <div class="section-title">Network</div>
@@ -299,7 +354,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     </div>
 
     <div class="footer">
-        <p>Source: <a href="https://github.com/qubic/doge-connect">github.com/qubic/doge-connect</a></p>
+        <p>Source: <a href="https://github.com/qubic/doge-connect">github.com/qubic/doge-connect</a> | <a href="https://discord.gg/qubic">Discord</a></p>
     </div>
     <script>
         const STATS_URL = '/dispatcher.json';
@@ -342,6 +397,8 @@ const HTML_PAGE = `<!DOCTYPE html>
                 document.getElementById('difficulty').textContent = formatNumber(d.mining.pool_difficulty);
                 document.getElementById('tasks').textContent = formatNumber(d.mining.tasks_distributed);
                 document.getElementById('activeTasks').textContent = d.active_tasks;
+                const compShares = d.computor_shares || {};
+                document.getElementById('activeComputors').textContent = Object.keys(compShares).length;
                 document.getElementById('peers').textContent = d.network.connected_peers + ' / ' + d.network.total_peers;
                 const pp = d.network.total_peers > 0 ? Math.round(d.network.connected_peers/d.network.total_peers*100) : 0;
                 document.getElementById('peersSub').textContent = pp + '% connected';
