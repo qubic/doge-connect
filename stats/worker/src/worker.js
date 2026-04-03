@@ -314,6 +314,14 @@ const HTML_PAGE = `<!DOCTYPE html>
             if (n >= 1e3) return (n/1e3).toFixed(1)+'K';
             return n.toString();
         }
+        function formatHashrate(h) {
+            if (!h || h === 0) return '0 H/s';
+            if (h >= 1e12) return (h/1e12).toFixed(1)+' TH/s';
+            if (h >= 1e9) return (h/1e9).toFixed(1)+' GH/s';
+            if (h >= 1e6) return (h/1e6).toFixed(1)+' MH/s';
+            if (h >= 1e3) return (h/1e3).toFixed(1)+' KH/s';
+            return h.toFixed(0)+' H/s';
+        }
         function setBar(id, v, max) {
             document.getElementById(id).style.width = (max > 0 ? Math.min(100, v/max*100) : 0) + '%';
         }
@@ -330,7 +338,7 @@ const HTML_PAGE = `<!DOCTYPE html>
                 l.textContent = 'online'; l.style.color = '#22c55e';
                 document.getElementById('uptime').textContent = formatUptime(d.uptime_seconds);
                 document.getElementById('lastUpdate').textContent = new Date(d.timestamp * 1000).toLocaleTimeString();
-                document.getElementById('hashrate').textContent = d.mining.hashrate_display;
+                document.getElementById('hashrate').textContent = formatHashrate(d.mining.hashrate);
                 document.getElementById('difficulty').textContent = formatNumber(d.mining.pool_difficulty);
                 document.getElementById('tasks').textContent = formatNumber(d.mining.tasks_distributed);
                 document.getElementById('activeTasks').textContent = d.active_tasks;
@@ -394,7 +402,7 @@ const HTML_PAGE = `<!DOCTYPE html>
                 const lastBlock = p.lastBlock || (p.lastBlockHeight ? p : null);
                 if (lastBlock && (lastBlock.height || lastBlock.lastBlockHeight)) {
                     const h = lastBlock.height || lastBlock.lastBlockHeight;
-                    document.getElementById('lastBlockHeight').textContent = '#' + formatNumber(h);
+                    document.getElementById('lastBlockHeight').textContent = '#' + h.toLocaleString();
                     document.getElementById('lastBlockTime').textContent = timeAgo(lastBlock.time || lastBlock.lastBlockTime || p.lastBlockTime);
                 }
 
