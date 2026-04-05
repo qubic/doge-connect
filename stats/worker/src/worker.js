@@ -522,16 +522,52 @@ export default {
             });
         }
 
-        // GET /pool.json -- serve pool stats from KV
+        // GET /pool.json -- serve pool stats from KV with mined_block_info augmentation
         if (url.pathname === '/pool.json') {
-            const data = await env.stats.get('DOGE_POOL');
-            return new Response(data || '{}', {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
-                    'Cache-Control': 'no-cache, max-age=0',
-                }
-            });
+            const raw = await env.stats.get('DOGE_POOL');
+            if (!raw) {
+                return new Response('{}', {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'no-cache, max-age=0',
+                    }
+                });
+            }
+            try {
+                const pool = JSON.parse(raw);
+                const recent = pool.recentBlocks || [];
+                const heights = recent
+                    .map(b => b.height)
+                    .filter(h => typeof h === 'number' && h > 0)
+                    .slice(0, 20);
+                const lastBlockTime = (pool.lastBlock && pool.lastBlock.time)
+                    || pool.lastBlockTime
+                    || (recent[0] && recent[0].time)
+                    || null;
+                const lastUpdate = lastBlockTime
+                    ? Math.floor((typeof lastBlockTime === 'string' ? new Date(lastBlockTime).getTime() : (lastBlockTime > 1e12 ? lastBlockTime : lastBlockTime * 1000)) / 1000)
+                    : Math.floor(Date.now() / 1000);
+                pool.mined_block_info = {
+                    last_20_mined_blocks: heights,
+                    last_update: lastUpdate,
+                };
+                return new Response(JSON.stringify(pool), {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'no-cache, max-age=0',
+                    }
+                });
+            } catch {
+                return new Response(raw, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*',
+                        'Cache-Control': 'no-cache, max-age=0',
+                    }
+                });
+            }
         }
 
         // GET /poolstats.json -- combined stats for miningpoolstats.stream
@@ -552,6 +588,12 @@ export default {
                 ? Math.floor((typeof lastBlockTime === 'string' ? new Date(lastBlockTime).getTime() : (lastBlockTime > 1e12 ? lastBlockTime : lastBlockTime * 1000)) / 1000)
                 : 0;
 
+            const recent = Array.isArray(pool.recentBlocks) ? pool.recentBlocks : [];
+            const last20 = recent
+                .map(b => b.height)
+                .filter(h => typeof h === 'number' && h > 0)
+                .slice(0, 20);
+
             const data = {
                 name: "qubic.org",
                 dashboard: "https://doge-stats.qubic.org",
@@ -565,6 +607,10 @@ export default {
                 blocks: blocks,
                 blockHeight: blockHeight,
                 lastBlockTime: lastBlockTs,
+                mined_block_info: {
+                    last_20_mined_blocks: last20,
+                    last_update: lastBlockTs || Math.floor(Date.now() / 1000),
+                },
             };
 
             return new Response(JSON.stringify(data, null, 2), {
