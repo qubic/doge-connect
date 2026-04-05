@@ -177,6 +177,7 @@ const Manager = function(config, configMain) {
       blockType: blockValid ? 'primary' : 'share',
       coinbase: coinbaseBuffer,
       difficulty: difficulty,
+      extraNonce2: submission.extraNonce2,
       hash: blockHash,
       hex: blockHex,
       header: headerHash,

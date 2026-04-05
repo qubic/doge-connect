@@ -176,6 +176,14 @@ const Stratum = function (logger, config, configMain) {
       const address = (shareData.addrPrimary || 'unknown').split('.')[0];
       const worker = (shareData.addrPrimary || '').split('.')[1] || null;
 
+      // Extract computor index from first 4 bytes of extraNonce2 (big endian) % 676.
+      // The dispatcher encodes the computor ID into extraNonce2[0..3].
+      let computorIdx = null;
+      if (shareData.extraNonce2 && shareData.extraNonce2.length >= 8) {
+        const compId = parseInt(shareData.extraNonce2.substring(0, 8), 16);
+        if (Number.isFinite(compId)) computorIdx = compId % 676;
+      }
+
       // Processed Share was Accepted
       if (shareValid) {
         const text = _this.text.stratumSharesText1(shareData.difficulty, shareData.shareDiff, address, shareData.ip);
@@ -193,6 +201,7 @@ const Stratum = function (logger, config, configMain) {
           hash: shareData.hash,
           difficulty: shareData.difficulty,
           shareDiff: shareData.shareDiff,
+          computorIdx: computorIdx,
         });
 
         // Check if share is a block
@@ -211,6 +220,7 @@ const Stratum = function (logger, config, configMain) {
           valid: false,
           address: address,
           error: shareData.error,
+          computorIdx: computorIdx,
         });
       }
     });
@@ -318,6 +328,7 @@ const Stratum = function (logger, config, configMain) {
           valid: true,
           address: _this.maskAddress(event.address),
           worker: event.worker,
+          computorIdx: event.computorIdx,
           difficulty: event.difficulty,
           shareDiff: event.shareDiff,
           isBlock: !!event.isBlock,
@@ -361,6 +372,7 @@ const Stratum = function (logger, config, configMain) {
           ts: Date.now(),
           valid: false,
           address: _this.maskAddress(event.address),
+          computorIdx: event.computorIdx,
           error: event.error,
         });
       }

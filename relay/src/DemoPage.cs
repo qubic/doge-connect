@@ -86,7 +86,7 @@ public static class DemoPage
             padding: 8px 15px;
             border-bottom: 1px solid #1a2836;
             display: grid;
-            grid-template-columns: 60px 80px 100px 100px 100px 40px 1fr;
+            grid-template-columns: 60px 80px 70px 100px 100px 100px 40px 1fr;
             gap: 10px;
             align-items: center;
             animation: slideIn 0.3s ease-out;
@@ -94,7 +94,7 @@ public static class DemoPage
         .feed-header-row {
             padding: 8px 15px;
             display: grid;
-            grid-template-columns: 60px 80px 100px 100px 100px 40px 1fr;
+            grid-template-columns: 60px 80px 70px 100px 100px 100px 40px 1fr;
             gap: 10px;
             font-size: 0.65em;
             color: #6b7280;
@@ -148,6 +148,7 @@ public static class DemoPage
         <div class="feed-header-row">
             <span>Type</span>
             <span>Status</span>
+            <span style="text-align:right">Comp</span>
             <span style="text-align:right">Pool Diff</span>
             <span style="text-align:right">Share Diff</span>
             <span style="text-align:right">Height</span>
@@ -189,6 +190,7 @@ public static class DemoPage
                     '<span class="status-valid">' + (evt.confirmed ? 'confirmed' : 'pending') + '</span>' +
                     '<span class="diff">-</span>' +
                     '<span class="diff">-</span>' +
+                    '<span class="diff">-</span>' +
                     '<span class="height-col">' + (evt.height || '-') + '</span>' +
                     '<span class="block-flag yes">Y</span>' +
                     '<span class="time">' + formatTime(evt.ts) + '</span>';
@@ -198,9 +200,11 @@ public static class DemoPage
                 const status = isInvalid ? 'rejected' : 'accepted';
                 const statusClass = isInvalid ? 'status-invalid' : 'status-valid';
                 const blkFlag = evt.isBlock ? '<span class="block-flag yes">Y</span>' : '<span class="block-flag">-</span>';
+                const comp = (evt.computorIdx !== null && evt.computorIdx !== undefined) ? evt.computorIdx : '-';
                 row.innerHTML =
                     '<span class="type-share">share</span>' +
                     '<span class="' + statusClass + '">' + status + '</span>' +
+                    '<span class="diff">' + comp + '</span>' +
                     '<span class="diff">' + formatNumber(evt.difficulty) + '</span>' +
                     '<span class="diff">' + formatNumber(evt.shareDiff) + '</span>' +
                     '<span class="height-col">' + (evt.height || '-') + '</span>' +
