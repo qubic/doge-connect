@@ -2,10 +2,6 @@ using StackExchange.Redis;
 
 namespace Qubic.Doge.Relay;
 
-/// <summary>
-/// Subscribes to the Redis pub/sub channel and broadcasts each message to all WS clients.
-/// Auto-reconnects to Redis if the connection drops.
-/// </summary>
 public class RedisSubscriberService : BackgroundService
 {
     private readonly ClientRegistry _clients;
@@ -13,7 +9,10 @@ public class RedisSubscriberService : BackgroundService
     private readonly string _redisUrl;
     private readonly string _channel;
 
-    public RedisSubscriberService(ClientRegistry clients, IConfiguration config, ILogger<RedisSubscriberService> logger)
+    public RedisSubscriberService(
+        ClientRegistry clients,
+        IConfiguration config,
+        ILogger<RedisSubscriberService> logger)
     {
         _clients = clients;
         _logger = logger;
@@ -25,29 +24,60 @@ public class RedisSubscriberService : BackgroundService
     {
         while (!ct.IsCancellationRequested)
         {
+            ConnectionMultiplexer? mux = null;
+
             try
             {
                 var options = ConfigurationOptions.Parse(_redisUrl);
                 options.AbortOnConnectFail = false;
                 options.ConnectRetry = 3;
-                using var mux = await ConnectionMultiplexer.ConnectAsync(options);
-                _logger.LogInformation("Connected to Redis at {Url}", _redisUrl);
+                options.ResolveDns = true;
+                options.ConnectTimeout = 15000;
+                options.SyncTimeout = 15000;
+                options.AsyncTimeout = 15000;
+                options.KeepAlive = 30;
 
-                var sub = mux.GetSubscriber();
-                var taskComplete = new TaskCompletionSource();
+                mux = await ConnectionMultiplexer.ConnectAsync(options);
 
                 mux.ConnectionFailed += (_, e) =>
                 {
-                    _logger.LogWarning("Redis connection failed: {Ex}", e.Exception?.Message);
-                    taskComplete.TrySetResult();
+                    _logger.LogWarning(e.Exception,
+                        "Redis connection failed. Endpoint={Endpoint}, Type={Type}, FailureType={FailureType}",
+                        e.EndPoint, e.ConnectionType, e.FailureType);
                 };
 
-                await sub.SubscribeAsync(RedisChannel.Literal(_channel), async (_, msg) =>
+                mux.ConnectionRestored += (_, e) =>
                 {
-                    if (msg.IsNullOrEmpty) return;
-                    var bytes = System.Text.Encoding.UTF8.GetBytes((string)msg!);
+                    _logger.LogInformation(
+                        "Redis connection restored. Endpoint={Endpoint}, Type={Type}",
+                        e.EndPoint, e.ConnectionType);
+                };
+
+                mux.ErrorMessage += (_, e) =>
+                {
+                    _logger.LogWarning("Redis error message: {Message}", e.Message);
+                };
+
+                mux.InternalError += (_, e) =>
+                {
+                    _logger.LogError(e.Exception, "Redis internal error");
+                };
+
+                var sub = mux.GetSubscriber();
+
+                var queue = await sub.SubscribeAsync(RedisChannel.Literal(_channel));
+
+                _logger.LogInformation(
+                    "Redis multiplexer created. IsConnected={IsConnected}. Subscribed to channel '{Channel}'",
+                    mux.IsConnected, _channel);
+
+                queue.OnMessage(async channelMessage =>
+                {
+                    if (channelMessage.Message.IsNullOrEmpty) return;
+
                     try
                     {
+                        var bytes = System.Text.Encoding.UTF8.GetBytes((string)channelMessage.Message!);
                         await _clients.BroadcastAsync(bytes, ct);
                     }
                     catch (Exception ex)
@@ -56,18 +86,38 @@ public class RedisSubscriberService : BackgroundService
                     }
                 });
 
-                _logger.LogInformation("Subscribed to channel '{Channel}'", _channel);
-
-                // Wait until cancelled or connection fails.
-                using (ct.Register(() => taskComplete.TrySetResult()))
-                    await taskComplete.Task;
+                try
+                {
+                    await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                }
 
                 await sub.UnsubscribeAsync(RedisChannel.Literal(_channel));
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Redis subscriber error, reconnecting in 5s");
-                await Task.Delay(5000, ct);
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(5), ct);
+                }
+                catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                {
+                    break;
+                }
+            }
+            finally
+            {
+                if (mux is not null)
+                    await mux.CloseAsync();
+                mux?.Dispose();
             }
         }
     }

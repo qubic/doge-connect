@@ -76,7 +76,10 @@ const Stratum = function (logger, config, configMain) {
   this.redisPublisher = null;
   this.redisErrorLogged = false;
   this.redisDropCount = 0;
-  if (configMain.redis && configMain.redis.url) {
+  // Only the stats aggregator process publishes (not the per-fork pool workers).
+  // Workers have forkId=0,1,2... The aggregator (instantiated in builder.js) has no forkId.
+  const isMasterProcess = process.env.forkId === undefined;
+  if (isMasterProcess && configMain.redis && configMain.redis.url) {
     try {
       const redis = require('redis');
       _this.redisPublisher = redis.createClient({
@@ -85,26 +88,48 @@ const Stratum = function (logger, config, configMain) {
         disableOfflineQueue: true,
         socket: {
           reconnectStrategy: (retries) => Math.min(retries * 200, 5000),
-          connectTimeout: 2000,
+          connectTimeout: 5000,
         }
       });
       _this.redisPublisher.on('error', (err) => {
         // Throttle error logging to avoid log spam (Redis down = many errors).
         if (!_this.redisErrorLogged) {
           _this.redisErrorLogged = true;
-          _this.logger && _this.logger['warning']('Pool', 'Redis', [`Publisher error (subsequent suppressed): ${err.message}`]);
+          _this.logger && _this.logger['warning']('Pool', 'Redis', [`Publisher error: ${err.message}`]);
           setTimeout(() => { _this.redisErrorLogged = false; }, 60000);
         }
       });
       _this.redisPublisher.on('ready', () => {
-        _this.logger['log']('Pool', 'Redis', [`Live feed publisher ready on ${configMain.redis.url}`]);
+        _this.logger['log']('Pool', 'Redis', [`Live feed publisher READY on ${configMain.redis.url}`]);
       });
+      _this.redisPublisher.on('connect', () => {
+        _this.logger['log']('Pool', 'Redis', [`Socket connected`]);
+      });
+      _this.redisPublisher.on('end', () => {
+        _this.logger['warning']('Pool', 'Redis', [`Connection closed`]);
+      });
+      _this.redisPublisher.on('reconnecting', () => {
+        _this.logger['log']('Pool', 'Redis', [`Reconnecting...`]);
+      });
+      _this.logger['log']('Pool', 'Redis', [`Connecting to ${configMain.redis.url}...`]);
       // Fire and forget — don't block startup on Redis availability.
-      _this.redisPublisher.connect().catch(() => {});
+      _this.redisPublisher.connect().catch((e) => {
+        _this.logger['warning']('Pool', 'Redis', [`Initial connect failed: ${e.message}`]);
+      });
     } catch (e) {
       _this.logger && _this.logger['warning']('Pool', 'Redis', [`Failed to init publisher: ${e.message}`]);
       _this.redisPublisher = null;
     }
+  }
+
+  // Periodic log of publish stats (master only, once a minute).
+  if (isMasterProcess && configMain.redis && configMain.redis.url) {
+    _this.redisPublishCount = 0;
+    setInterval(() => {
+      _this.logger['log']('Pool', 'Redis', [
+        `Stats: ready=${_this.redisPublisher ? _this.redisPublisher.isReady : false} published=${_this.redisPublishCount} dropped=${_this.redisDropCount}`
+      ]);
+    }, 60000);
   }
 
   // Publish an event — strictly non-blocking, errors silently dropped.
@@ -122,9 +147,9 @@ const Stratum = function (logger, config, configMain) {
     try {
       const channel = (configMain.redis && configMain.redis.channel) || 'doge:shares';
       // fire-and-forget: node-redis returns a Promise but we don't await it.
-      _this.redisPublisher.publish(channel, payload).catch(() => {
-        _this.redisDropCount++;
-      });
+      _this.redisPublisher.publish(channel, payload)
+        .then(() => { _this.redisPublishCount = (_this.redisPublishCount || 0) + 1; })
+        .catch(() => { _this.redisDropCount++; });
     } catch (e) {
       // Synchronous error from publish() — drop silently.
       _this.redisDropCount++;
@@ -156,41 +181,23 @@ const Stratum = function (logger, config, configMain) {
         const text = _this.text.stratumSharesText1(shareData.difficulty, shareData.shareDiff, address, shareData.ip);
         _this.logger['log']('Pool', 'Checks', [text]);
 
-        // Send event to master for aggregation
+        // Send event to master for aggregation + Redis publish.
         _this.sendStatsEvent({
           type: 'share',
           valid: true,
           address: address,
+          worker: worker,
           isBlock: shareData.blockType === 'primary',
           accepted: !!accepted,
           height: shareData.height,
           hash: shareData.hash,
-        });
-
-        // Publish to Redis for live feed (mask worker ID for privacy).
-        _this.publishLiveEvent({
-          type: 'share',
-          ts: Date.now(),
-          valid: true,
-          address: address.substring(0, 6) + '...' + address.substring(address.length - 4),
-          worker: worker,
           difficulty: shareData.difficulty,
           shareDiff: shareData.shareDiff,
-          isBlock: shareData.blockType === 'primary',
-          height: shareData.height,
         });
 
         // Check if share is a block
         if (shareData.blockType === 'primary') {
           _this.logger['special']('Pool', 'Blocks', [`*** BLOCK FOUND at height ${shareData.height} by ${address} | hash: ${shareData.hash} | ${accepted ? 'CONFIRMED' : 'pending'} ***`]);
-          _this.publishLiveEvent({
-            type: 'block',
-            ts: Date.now(),
-            height: shareData.height,
-            hash: shareData.hash,
-            worker: address.substring(0, 6) + '...' + address.substring(address.length - 4),
-            confirmed: !!accepted,
-          });
         }
 
       // Processed Share was Rejected
@@ -198,19 +205,11 @@ const Stratum = function (logger, config, configMain) {
         const text = _this.text.stratumSharesText2(shareData.error, address, shareData.ip);
         _this.logger['error']('Pool', 'Checks', [text]);
 
-        // Send event to master for aggregation
+        // Send event to master for aggregation + Redis publish.
         _this.sendStatsEvent({
           type: 'share',
           valid: false,
           address: address,
-        });
-
-        // Publish rejection to Redis live feed.
-        _this.publishLiveEvent({
-          type: 'share',
-          ts: Date.now(),
-          valid: false,
-          address: address.substring(0, 6) + '...' + address.substring(address.length - 4),
           error: shareData.error,
         });
       }
@@ -295,7 +294,14 @@ const Stratum = function (logger, config, configMain) {
     }, 60000);
   };
 
-  // Handle stats event from a worker fork (called on master)
+  // Mask an address for public live feed (first 6 + last 4 chars).
+  this.maskAddress = function(addr) {
+    if (!addr || addr.length < 12) return addr || '';
+    return addr.substring(0, 6) + '...' + addr.substring(addr.length - 4);
+  };
+
+  // Handle stats event from a worker fork (called on master).
+  // Updates local stats AND publishes to Redis live feed from a single connection.
   this.handleStatsEvent = function(event) {
     if (event.type === 'share') {
       _this.stats.lastShareTime = Date.now();
@@ -304,6 +310,20 @@ const Stratum = function (logger, config, configMain) {
         _this.shareTimestamps.push(Date.now());
         if (!_this.stats.workers[event.address]) _this.stats.workers[event.address] = { valid: 0, invalid: 0, blocks: 0 };
         _this.stats.workers[event.address].valid++;
+
+        // Publish share to Redis live feed (mask worker address for privacy).
+        _this.publishLiveEvent({
+          type: 'share',
+          ts: Date.now(),
+          valid: true,
+          address: _this.maskAddress(event.address),
+          worker: event.worker,
+          difficulty: event.difficulty,
+          shareDiff: event.shareDiff,
+          isBlock: !!event.isBlock,
+          height: event.height,
+        });
+
         if (event.isBlock) {
           _this.stats.blocksFound++;
           _this.stats.lastBlockTime = Date.now();
@@ -319,11 +339,30 @@ const Stratum = function (logger, config, configMain) {
           });
           if (_this.stats.recentBlocks.length > 10) _this.stats.recentBlocks.length = 10;
           _this.saveStats();
+
+          // Publish block event to Redis live feed.
+          _this.publishLiveEvent({
+            type: 'block',
+            ts: Date.now(),
+            height: event.height,
+            hash: event.hash,
+            worker: _this.maskAddress(event.address),
+            confirmed: !!event.accepted,
+          });
         }
       } else {
         _this.stats.sharesInvalid++;
         if (!_this.stats.workers[event.address]) _this.stats.workers[event.address] = { valid: 0, invalid: 0, blocks: 0 };
         _this.stats.workers[event.address].invalid++;
+
+        // Publish rejection to Redis live feed.
+        _this.publishLiveEvent({
+          type: 'share',
+          ts: Date.now(),
+          valid: false,
+          address: _this.maskAddress(event.address),
+          error: event.error,
+        });
       }
     }
   };

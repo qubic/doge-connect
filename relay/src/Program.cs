@@ -34,6 +34,11 @@ app.MapGet("/health", (ClientRegistry reg) => Results.Ok(new
     uptimeSeconds = (DateTime.UtcNow - Process.StartTime.ToUniversalTime()).TotalSeconds
 }));
 
+// Simple demo page with a live feed client
+app.MapGet("/", () => Results.Content(DemoPage.Html, "text/html"));
+app.MapGet("/favicon.svg", () => Results.Content(DemoPage.FaviconSvg, "image/svg+xml"));
+app.MapGet("/favicon.ico", () => Results.Content(DemoPage.FaviconSvg, "image/svg+xml"));
+
 // WebSocket endpoint for clients
 app.Map("/ws", async (HttpContext ctx, ClientRegistry reg, ILogger<Program> logger) =>
 {

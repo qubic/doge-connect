@@ -251,7 +251,7 @@ const HTML_PAGE = `<!DOCTYPE html>
             &bull; Uptime: <span id="uptime" style="color:#e5e7eb">--</span>
         </div>
     </div>
-    <div class="last-update">Last update: <span id="lastUpdate">--</span></div>
+    <div class="last-update">Last update: <span id="lastUpdate">--</span> &bull; <a href="https://live.doge-stats.qubic.org" style="color:#f59e0b">View Live Feed &rarr;</a></div>
     <div class="section-title">Mining Overview</div>
     <div class="grid">
         <div class="card">
@@ -368,7 +368,7 @@ const HTML_PAGE = `<!DOCTYPE html>
     </div>
 
     <div class="footer">
-        <p>Source: <a href="https://github.com/qubic/doge-connect">github.com/qubic/doge-connect</a> | <a href="https://discord.gg/qubic">Discord</a></p>
+        <p>Source: <a href="https://github.com/qubic/doge-connect">github.com/qubic/doge-connect</a> | <a href="https://live.doge-stats.qubic.org">Live Feed</a> | <a href="https://discord.gg/qubic">Discord</a></p>
     </div>
     <script>
         const STATS_URL = '/dispatcher.json';
