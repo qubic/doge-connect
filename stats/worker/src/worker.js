@@ -214,6 +214,20 @@ const HTML_PAGE = `<!DOCTYPE html>
                 </div>
                 <div style="background:#0d1a24;border:1px solid #1e3a50;border-radius:6px;padding:14px">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                        <strong style="color:#f59e0b;font-size:0.9em">Minerlab</strong>
+                        <div style="display:flex;gap:10px;font-size:0.7em">
+                            <a href="https://qubic.minerlab.io">Website</a>
+                            <a href="https://qubic.minerlab.io">Setup Guide</a>
+                        </div>
+                    </div>
+                    <div style="font-size:0.85em;color:#6b7280;line-height:2">
+                        <div><span style="color:#9ca3af">Main Stratum:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">stratum+tcp://qdoge.minerlab.io:18861</code></div>
+                        <div><span style="color:#9ca3af">Username:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">MinerlabUsername.workerName</code></div>
+                        <div><span style="color:#9ca3af">Password:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">x</code></div>
+                    </div>
+                </div>
+                <div style="background:#0d1a24;border:1px solid #1e3a50;border-radius:6px;padding:14px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                         <strong style="color:#f59e0b;font-size:0.9em">QLI (qubic.li)</strong>
                         <div style="display:flex;gap:10px;font-size:0.7em">
                             <a href="https://platform.qubic.li">Website</a>
