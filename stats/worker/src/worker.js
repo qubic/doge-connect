@@ -237,7 +237,7 @@ const HTML_PAGE = `<!DOCTYPE html>
                     <div style="font-size:0.85em;color:#6b7280;line-height:2">
                         <div><span style="color:#9ca3af">Main Stratum:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">stratum+tcp://doge.qubic.li:12480</code></div>
                         <div><span style="color:#9ca3af">Username:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">&lt;QUBIC_ADDRESS&gt;.workerName</code></div>
-                        <div><span style="color:#9ca3af">Password:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">(empty)</code> or e.g. <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">d=153000000</code> to set a starting difficulty</div>
+                        <div><span style="color:#9ca3af">Password:</span> <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">(empty)</code> or e.g. <code style="color:#e5e7eb;background:#111d2a;padding:2px 6px;border-radius:3px">d=1530000</code> to set a starting difficulty</div>
                     </div>
                 </div>
             </div>
@@ -549,7 +549,7 @@ export default {
                     ? Math.floor((typeof lastBlockTime === 'string' ? new Date(lastBlockTime).getTime() : (lastBlockTime > 1e12 ? lastBlockTime : lastBlockTime * 1000)) / 1000)
                     : Math.floor(Date.now() / 1000);
                 pool.mined_block_info = {
-                    last_20_mined_blocks: heights,
+                    last_10_mined_blocks: heights,
                     last_update: lastUpdate,
                 };
                 return new Response(JSON.stringify(pool), {
@@ -589,7 +589,7 @@ export default {
                 : 0;
 
             const recent = Array.isArray(pool.recentBlocks) ? pool.recentBlocks : [];
-            const last20 = recent
+            const last10 = recent
                 .map(b => b.height)
                 .filter(h => typeof h === 'number' && h > 0)
                 .slice(0, 20);
@@ -608,7 +608,7 @@ export default {
                 blockHeight: blockHeight,
                 lastBlockTime: lastBlockTs,
                 mined_block_info: {
-                    last_20_mined_blocks: last20,
+                    last_10_mined_blocks: last10,
                     last_update: lastBlockTs || Math.floor(Date.now() / 1000),
                 },
             };
