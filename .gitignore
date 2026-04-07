@@ -1,7 +1,5 @@
 dispatcher/build/
 
 # .NET build artifacts
-relay/bin/
-relay/obj/
-relay/**/bin/
-relay/**/obj/
+**/bin/
+**/obj/
