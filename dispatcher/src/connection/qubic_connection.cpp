@@ -269,7 +269,7 @@ bool QubicConnection::openQubicConnection(const std::string& ip, int port)
 
     // Reset to no timeout.
     setTimeout(SO_RCVTIMEO, 0);
-    setTimeout(SO_SNDTIMEO, 0);
+    setTimeout(SO_SNDTIMEO, /*milliseconds=*/1000);
 
     return true;
 }
