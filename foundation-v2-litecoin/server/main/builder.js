@@ -1,3 +1,4 @@
+const Stratum = require('./stratum');
 const Text = require('../../locales/index');
 const cluster = require('cluster');
 const utils = require('./utils');
@@ -16,6 +17,9 @@ const Builder = function(logger, configMain) {
   this.workers = {};
   this.numWorkers = 0;
 
+  // Stats aggregator (runs on master only)
+  this.statsAggregator = null;
+
   // Handle Pool Worker Creation
   /* istanbul ignore next */
   this.createPoolWorkers = function(forkId) {
@@ -26,6 +30,13 @@ const Builder = function(logger, configMain) {
       configMain: JSON.stringify(_this.configMain),
       forkId: forkId,
       type: 'worker',
+    });
+
+    // Listen for stats events from worker
+    _this.workers[forkId].on('message', (msg) => {
+      if (msg && msg.type === 'stats' && _this.statsAggregator) {
+        _this.statsAggregator.handleStatsEvent(msg.event);
+      }
     });
 
     // Handle Worker Failover
@@ -51,6 +62,11 @@ const Builder = function(logger, configMain) {
       _this.logger.error('Builder', 'Workers', lines);
       return;
     }
+
+    // Setup stats aggregator on master
+    _this.statsAggregator = new Stratum(_this.logger, _this.config, _this.configMain);
+    _this.statsAggregator.setupStatsServer();
+    _this.statsAggregator.setupStatsLogging();
 
     // Create Pool Workers
     const startInterval = setInterval(() => {
