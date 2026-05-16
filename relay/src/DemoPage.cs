@@ -86,7 +86,7 @@ public static class DemoPage
             padding: 8px 15px;
             border-bottom: 1px solid #1a2836;
             display: grid;
-            grid-template-columns: 60px 80px 70px 100px 100px 100px 40px 1fr;
+            grid-template-columns: 60px 50px 80px 70px 100px 100px 100px 40px 1fr;
             gap: 10px;
             align-items: center;
             animation: slideIn 0.3s ease-out;
@@ -94,7 +94,7 @@ public static class DemoPage
         .feed-header-row {
             padding: 8px 15px;
             display: grid;
-            grid-template-columns: 60px 80px 70px 100px 100px 100px 40px 1fr;
+            grid-template-columns: 60px 50px 80px 70px 100px 100px 100px 40px 1fr;
             gap: 10px;
             font-size: 0.65em;
             color: #6b7280;
@@ -147,6 +147,7 @@ public static class DemoPage
         <div class="feed-header">Live Events</div>
         <div class="feed-header-row">
             <span>Type</span>
+            <span style="text-align:center">Coin</span>
             <span>Status</span>
             <span style="text-align:right">Comp</span>
             <span style="text-align:right">Pool Diff</span>
@@ -184,9 +185,18 @@ public static class DemoPage
             const isInvalid = evt.valid === false;
             row.className = 'feed-row' + (isBlockEvent || evt.isBlock ? ' block' : '') + (isInvalid ? ' invalid' : '');
 
+            // Coin badge: present on events from a merged-mining pool (chain + coin tagged).
+            // For legacy DOGE-solo events with no coin field, show '-'.
+            const coinBadge = evt.coin
+                ? '<span style="display:inline-block;text-align:center;padding:1px 4px;border-radius:3px;font-size:0.8em;background:' +
+                    (evt.chain === 'auxiliary' ? '#7c2d12' : '#1e40af') +
+                    ';color:#fef3c7">' + evt.coin + '</span>'
+                : '<span class="diff">-</span>';
+
             if (isBlockEvent) {
                 row.innerHTML =
                     '<span class="type-block">BLOCK</span>' +
+                    coinBadge +
                     '<span class="status-valid">' + (evt.confirmed ? 'confirmed' : 'pending') + '</span>' +
                     '<span class="diff">-</span>' +
                     '<span class="diff">-</span>' +
@@ -203,6 +213,7 @@ public static class DemoPage
                 const comp = (evt.computorIdx !== null && evt.computorIdx !== undefined) ? evt.computorIdx : '-';
                 row.innerHTML =
                     '<span class="type-share">share</span>' +
+                    coinBadge +
                     '<span class="' + statusClass + '">' + status + '</span>' +
                     '<span class="diff">' + comp + '</span>' +
                     '<span class="diff">' + formatNumber(evt.difficulty) + '</span>' +

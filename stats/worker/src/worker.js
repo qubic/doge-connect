@@ -334,17 +334,27 @@ const HTML_PAGE = `<!DOCTYPE html>
             <div class="card-value accepted" id="acceptRate">--</div>
         </div>
     </div>
-    <div class="section-title">Solo Pool</div>
+    <div class="section-title" id="poolSectionTitle">Solo Pool</div>
     <div class="grid">
         <div class="card">
-            <div class="card-label">Blocks Found</div>
+            <div class="card-label" id="blocksFoundLabel">Blocks Found</div>
             <div class="card-value hashrate" id="blocksFound">--</div>
             <div class="card-sub" id="blocksConfirmed"></div>
         </div>
+        <div class="card" id="auxBlocksFoundCard" style="display:none">
+            <div class="card-label" id="auxBlocksFoundLabel">Aux Blocks Found</div>
+            <div class="card-value hashrate" id="auxBlocksFound">--</div>
+            <div class="card-sub" id="auxBlocksConfirmed"></div>
+        </div>
         <div class="card">
-            <div class="card-label">Last Block</div>
+            <div class="card-label" id="lastBlockLabel">Last Block</div>
             <div class="card-value" id="lastBlockHeight" style="font-size:1.1em">--</div>
             <div class="card-sub" id="lastBlockTime"></div>
+        </div>
+        <div class="card" id="auxLastBlockCard" style="display:none">
+            <div class="card-label" id="auxLastBlockLabel">Last Aux Block</div>
+            <div class="card-value" id="auxLastBlockHeight" style="font-size:1.1em">--</div>
+            <div class="card-sub" id="auxLastBlockTime"></div>
         </div>
         <div class="card">
             <div class="card-label">Pool Shares</div>
@@ -460,14 +470,34 @@ const HTML_PAGE = `<!DOCTYPE html>
                 // Support both flat format (sharesValid) and nested format (shares.valid)
                 const valid = p.sharesValid ?? (p.shares && p.shares.valid) ?? null;
                 const invalid = p.sharesInvalid ?? (p.shares && p.shares.invalid) ?? 0;
-                const found = p.blocksFound ?? (p.blocks && p.blocks.found) ?? 0;
-                const confirmed = p.blocksConfirmed ?? (p.blocks && p.blocks.confirmed) ?? 0;
                 if (valid === null) return;
 
-                document.getElementById('blocksFound').textContent = found;
-                document.getElementById('blocksConfirmed').textContent = confirmed + ' confirmed';
-                document.getElementById('poolSharesValid').textContent = formatNumber(valid);
-                document.getElementById('poolSharesInvalid').textContent = invalid + ' invalid';
+                // Per-coin block counts — primary always present; auxiliary only on merged pools.
+                const primaryCoin = (p.chains && p.chains.primary) || 'DOGE';
+                const auxCoin = p.chains && p.chains.auxiliary;
+                const isMerged = !!auxCoin;
+
+                const primaryFound = (p.blocks && p.blocks.primary && p.blocks.primary.found)
+                    ?? (p.blocks && p.blocks.found) ?? p.blocksFound ?? 0;
+                const primaryConfirmed = (p.blocks && p.blocks.primary && p.blocks.primary.confirmed)
+                    ?? (p.blocks && p.blocks.confirmed) ?? p.blocksConfirmed ?? 0;
+                const auxFound = (p.blocks && p.blocks.auxiliary && p.blocks.auxiliary.found) || 0;
+                const auxConfirmed = (p.blocks && p.blocks.auxiliary && p.blocks.auxiliary.confirmed) || 0;
+
+                // Section + label updates
+                document.getElementById('poolSectionTitle').textContent = isMerged
+                    ? ('Merged Pool — ' + primaryCoin + ' + ' + auxCoin)
+                    : 'Solo Pool';
+                document.getElementById('blocksFoundLabel').textContent = isMerged
+                    ? (primaryCoin + ' Blocks Found')
+                    : 'Blocks Found';
+                document.getElementById('lastBlockLabel').textContent = isMerged
+                    ? ('Last ' + primaryCoin + ' Block')
+                    : 'Last Block';
+
+                // Primary (LTC on merged, DOGE on solo)
+                document.getElementById('blocksFound').textContent = primaryFound;
+                document.getElementById('blocksConfirmed').textContent = primaryConfirmed + ' confirmed';
 
                 const lastBlock = p.lastBlock || (p.lastBlockHeight ? p : null);
                 if (lastBlock && (lastBlock.height || lastBlock.lastBlockHeight)) {
@@ -475,6 +505,32 @@ const HTML_PAGE = `<!DOCTYPE html>
                     document.getElementById('lastBlockHeight').textContent = '#' + h.toLocaleString();
                     document.getElementById('lastBlockTime').textContent = timeAgo(lastBlock.time || lastBlock.lastBlockTime || p.lastBlockTime);
                 }
+
+                // Auxiliary (DOGE on merged) — show cards only when merged
+                const auxBlocksCard = document.getElementById('auxBlocksFoundCard');
+                const auxLastBlockCard = document.getElementById('auxLastBlockCard');
+                if (isMerged) {
+                    auxBlocksCard.style.display = '';
+                    auxLastBlockCard.style.display = '';
+                    document.getElementById('auxBlocksFoundLabel').textContent = auxCoin + ' Blocks Found';
+                    document.getElementById('auxLastBlockLabel').textContent = 'Last ' + auxCoin + ' Block';
+                    document.getElementById('auxBlocksFound').textContent = auxFound;
+                    document.getElementById('auxBlocksConfirmed').textContent = auxConfirmed + ' confirmed';
+
+                    if (p.lastBlockAuxiliary && p.lastBlockAuxiliary.height) {
+                        document.getElementById('auxLastBlockHeight').textContent = '#' + p.lastBlockAuxiliary.height.toLocaleString();
+                        document.getElementById('auxLastBlockTime').textContent = timeAgo(p.lastBlockAuxiliary.time);
+                    } else {
+                        document.getElementById('auxLastBlockHeight').textContent = '--';
+                        document.getElementById('auxLastBlockTime').textContent = '';
+                    }
+                } else {
+                    auxBlocksCard.style.display = 'none';
+                    auxLastBlockCard.style.display = 'none';
+                }
+
+                document.getElementById('poolSharesValid').textContent = formatNumber(valid);
+                document.getElementById('poolSharesInvalid').textContent = invalid + ' invalid';
 
                 // Share rate: use pool's perMinute if available, otherwise calculate from uptime
                 const spm = (p.shares && p.shares.perMinute != null) ? p.shares.perMinute : (p.uptime > 0 ? (valid / p.uptime * 60) : 0);
@@ -487,13 +543,19 @@ const HTML_PAGE = `<!DOCTYPE html>
                 if (p.recentBlocks && p.recentBlocks.length > 0) {
                     document.getElementById('recentBlocksSection').style.display = '';
                     const list = document.getElementById('recentBlocksList');
-                    list.innerHTML = p.recentBlocks.map(b =>
-                        '<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid #1e3a50">' +
-                        '<span style="color:#f59e0b">#' + b.height + '</span>' +
-                        '<span style="color:' + (b.confirmed ? '#22c55e' : '#f59e0b') + '">' + (b.confirmed ? 'confirmed' : 'pending') + '</span>' +
-                        '<span style="color:#6b7280">' + new Date(b.time).toLocaleString() + '</span>' +
-                        '</div>'
-                    ).join('');
+                    list.innerHTML = p.recentBlocks.map(function(b) {
+                        // Color-code the badge: primary chain blue, auxiliary chain orange.
+                        const badge = b.coin
+                            ? '<span style="display:inline-block;min-width:36px;text-align:center;padding:1px 6px;border-radius:3px;font-size:0.85em;background:' +
+                                (b.chain === 'auxiliary' ? '#7c2d12' : '#1e40af') +
+                                ';color:#fef3c7;margin-right:8px">' + b.coin + '</span>'
+                            : '';
+                        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid #1e3a50">' +
+                            '<span>' + badge + '<span style="color:#f59e0b">#' + b.height + '</span></span>' +
+                            '<span style="color:' + (b.confirmed ? '#22c55e' : '#f59e0b') + '">' + (b.confirmed ? 'confirmed' : 'pending') + '</span>' +
+                            '<span style="color:#6b7280">' + new Date(b.time).toLocaleString() + '</span>' +
+                            '</div>';
+                    }).join('');
                 }
             } catch(e) {}
         }
@@ -505,6 +567,39 @@ const HTML_PAGE = `<!DOCTYPE html>
     </script>
 </body>
 </html>`;
+
+// Extract DOGE-specific stats from a pool JSON, regardless of whether DOGE is
+// the primary chain (DOGE-solo pool) or auxiliary chain (LTC+DOGE merged pool).
+// miningpoolstats.stream tracks DOGE specifically, so /poolstats.json and the
+// mined_block_info field both need to report DOGE numbers — not whichever chain
+// happens to be primary on the upstream pool.
+function dogeSlice(pool) {
+    const isAuxDoge = pool && pool.chains && pool.chains.auxiliary === 'DOGE';
+    const blocks = pool && pool.blocks || {};
+    const recent = Array.isArray(pool && pool.recentBlocks) ? pool.recentBlocks : [];
+
+    // Filter recentBlocks to DOGE chain only. Legacy entries without a `chain`
+    // tag are assumed to be from the DOGE-solo era (no aux chain) → primary.
+    const dogeRecent = recent.filter(b => {
+        if (!b) return false;
+        if (b.coin) return b.coin === 'DOGE';
+        return isAuxDoge ? b.chain === 'auxiliary' : (!b.chain || b.chain === 'primary');
+    });
+
+    let found, confirmed, lastBlock;
+    if (isAuxDoge) {
+        found = (blocks.auxiliary && blocks.auxiliary.found) || 0;
+        confirmed = (blocks.auxiliary && blocks.auxiliary.confirmed) || 0;
+        lastBlock = pool.lastBlockAuxiliary || null;
+    } else {
+        // DOGE primary (solo pool) — also covers legacy responses with no `chains` field.
+        found = (blocks.primary && blocks.primary.found) ?? blocks.found ?? pool.blocksFound ?? 0;
+        confirmed = (blocks.primary && blocks.primary.confirmed) ?? blocks.confirmed ?? pool.blocksConfirmed ?? 0;
+        lastBlock = pool.lastBlock || (pool.lastBlockHeight ? { height: pool.lastBlockHeight, time: pool.lastBlockTime } : null);
+    }
+
+    return { found, confirmed, lastBlock, recent: dogeRecent };
+}
 
 export default {
     async fetch(request, env) {
@@ -536,14 +631,15 @@ export default {
             }
             try {
                 const pool = JSON.parse(raw);
-                const recent = pool.recentBlocks || [];
-                const heights = recent
+                // mined_block_info is consumed by miningpoolstats.stream — must be DOGE only,
+                // even when the upstream pool is LTC+DOGE merged-mining.
+                const doge = dogeSlice(pool);
+                const heights = doge.recent
                     .map(b => b.height)
                     .filter(h => typeof h === 'number' && h > 0)
                     .slice(0, 20);
-                const lastBlockTime = (pool.lastBlock && pool.lastBlock.time)
-                    || pool.lastBlockTime
-                    || (recent[0] && recent[0].time)
+                const lastBlockTime = (doge.lastBlock && doge.lastBlock.time)
+                    || (doge.recent[0] && doge.recent[0].time)
                     || null;
                 const lastUpdate = lastBlockTime
                     ? Math.floor((typeof lastBlockTime === 'string' ? new Date(lastBlockTime).getTime() : (lastBlockTime > 1e12 ? lastBlockTime : lastBlockTime * 1000)) / 1000)
@@ -577,19 +673,23 @@ export default {
             const disp = dispRaw ? JSON.parse(dispRaw) : {};
             const pool = poolRaw ? JSON.parse(poolRaw) : {};
 
-            const hashrate = disp.mining ? disp.mining.hashrate || 0 : 0;
-            const shares = pool.shares ? pool.shares.valid || pool.sharesValid || 0 : pool.sharesValid || 0;
-            const blocks = pool.blocks ? pool.blocks.found || pool.blocksFound || 0 : pool.blocksFound || 0;
-            const lastBlock = pool.lastBlock || {};
-            const blockHeight = lastBlock.height || pool.lastBlockHeight || 0;
+            // miningpoolstats.stream tracks DOGE. Pull DOGE-specific counters
+            // regardless of whether the source pool has DOGE as primary (solo)
+            // or auxiliary (merged with LTC).
+            const doge = dogeSlice(pool);
 
-            const lastBlockTime = lastBlock.time || pool.lastBlockTime || pool.lastShare || null;
+            const hashrate = disp.mining ? disp.mining.hashrate || 0 : 0;
+            const shares = (pool.shares && pool.shares.valid) || pool.sharesValid || 0;
+            const blocks = doge.found;
+            const lastBlock = doge.lastBlock || {};
+            const blockHeight = lastBlock.height || 0;
+
+            const lastBlockTime = lastBlock.time || pool.lastShare || null;
             const lastBlockTs = lastBlockTime
                 ? Math.floor((typeof lastBlockTime === 'string' ? new Date(lastBlockTime).getTime() : (lastBlockTime > 1e12 ? lastBlockTime : lastBlockTime * 1000)) / 1000)
                 : 0;
 
-            const recent = Array.isArray(pool.recentBlocks) ? pool.recentBlocks : [];
-            const last10 = recent
+            const last10 = doge.recent
                 .map(b => b.height)
                 .filter(h => typeof h === 'number' && h > 0)
                 .slice(0, 20);

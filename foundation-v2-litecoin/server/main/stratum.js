@@ -173,6 +173,19 @@ const Stratum = function (logger, config, configMain) {
       _this.logger[severity]('Pool', 'Checks', [text], separator);
     });
 
+    // Forward network/template events to master so /stats can expose currentHeight.
+    // The Pool instance only lives in worker forks — the master's statsAggregator
+    // has no direct view, so we ferry the data via IPC.
+    _this.stratum.on('pool.network', (networkData) => {
+      _this.sendStatsEvent({
+        type: 'network',
+        chain: networkData.networkType,             // 'primary' | 'auxiliary'
+        height: networkData.height,
+        difficulty: networkData.difficulty,
+        hashrate: networkData.hashrate,
+      });
+    });
+
     // Coin symbols (used to tag every stats event so consumers don't have to
     // map 'primary' → LTC / 'auxiliary' → DOGE themselves).
     const primarySymbol = (_this.config.primary && _this.config.primary.coin && _this.config.primary.coin.symbol) || 'PRI';
@@ -308,7 +321,14 @@ const Stratum = function (logger, config, configMain) {
         const data = {
           uptime: uptime,
           chains: auxEnabled ? { primary: priCoin, auxiliary: auxCoin } : { primary: priCoin },
-          currentHeight: _this.stratum && _this.stratum.manager.currentJob ? _this.stratum.manager.currentJob.rpcData.height : null,
+          currentHeight: _this.stats.currentHeight || null,
+          currentHeightAuxiliary: auxEnabled ? (_this.stats.currentHeightAuxiliary || null) : null,
+          network: {
+            primary:   { coin: priCoin, difficulty: _this.stats.networkDifficulty || null, hashrate: _this.stats.networkHashrate || null },
+            auxiliary: auxEnabled
+              ? { coin: auxCoin, difficulty: _this.stats.networkDifficultyAuxiliary || null, hashrate: _this.stats.networkHashrateAuxiliary || null }
+              : null,
+          },
           shares: { valid: _this.stats.sharesValid, invalid: _this.stats.sharesInvalid, perMinute: parseFloat(_this.getSharesPerMinute()) },
           blocks: {
             primary: { coin: priCoin, found: _this.stats.blocksFound, confirmed: _this.stats.blocksConfirmed },
@@ -383,6 +403,18 @@ const Stratum = function (logger, config, configMain) {
   };
 
   this.handleStatsEvent = function(event) {
+    if (event.type === 'network') {
+      if (event.chain === 'primary') {
+        _this.stats.currentHeight = event.height;
+        _this.stats.networkDifficulty = event.difficulty;
+        _this.stats.networkHashrate = event.hashrate;
+      } else if (event.chain === 'auxiliary') {
+        _this.stats.currentHeightAuxiliary = event.height;
+        _this.stats.networkDifficultyAuxiliary = event.difficulty;
+        _this.stats.networkHashrateAuxiliary = event.hashrate;
+      }
+      return;
+    }
     if (event.type === 'share') {
       _this.stats.lastShareTime = Date.now();
       if (event.valid) {

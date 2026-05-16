@@ -20,7 +20,7 @@ const Manager = function(config, configMain) {
 
   // ExtraNonce Variables
   this.extraNonceCounter = utils.extraNonceCounter(4);
-  this.extraNoncePlaceholder = Buffer.from('f000000ff111111f', 'hex');
+  this.extraNoncePlaceholder = Buffer.from('f000000ff111111ff222222f', 'hex');
   this.extraNonce2Size = _this.extraNoncePlaceholder.length - _this.extraNonceCounter.size;
 
   // Check if New Block is Processed

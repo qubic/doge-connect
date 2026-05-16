@@ -169,6 +169,17 @@ const Stratum = function (logger, config, configMain) {
       _this.logger[severity]('Pool', 'Checks', [text], separator);
     });
 
+    // Forward network/template events to master so /stats can expose currentHeight.
+    _this.stratum.on('pool.network', (networkData) => {
+      _this.sendStatsEvent({
+        type: 'network',
+        chain: networkData.networkType,
+        height: networkData.height,
+        difficulty: networkData.difficulty,
+        hashrate: networkData.hashrate,
+      });
+    });
+
     // Handle Stratum Share Events
     _this.stratum.on('pool.share', (shareData, shareValid, accepted) => {
 
@@ -269,13 +280,24 @@ const Stratum = function (logger, config, configMain) {
     const server = http.createServer((req, res) => {
       if (req.url === '/stats' || req.url === '/') {
         const uptime = Math.floor((Date.now() - _this.stats.startTime) / 1000);
+        const priCoin = (_this.config.primary && _this.config.primary.coin && _this.config.primary.coin.symbol) || 'PRI';
+        const auxEnabled = !!(_this.config.auxiliary && _this.config.auxiliary.enabled);
+        const auxCoin = auxEnabled ? ((_this.config.auxiliary.coin && _this.config.auxiliary.coin.symbol) || 'AUX') : null;
         const data = {
           uptime: uptime,
-          currentHeight: _this.stratum && _this.stratum.manager.currentJob ? _this.stratum.manager.currentJob.rpcData.height : null,
+          chains: auxEnabled ? { primary: priCoin, auxiliary: auxCoin } : { primary: priCoin },
+          currentHeight: _this.stats.currentHeight || null,
+          currentHeightAuxiliary: auxEnabled ? (_this.stats.currentHeightAuxiliary || null) : null,
+          network: {
+            primary:   { coin: priCoin, difficulty: _this.stats.networkDifficulty || null, hashrate: _this.stats.networkHashrate || null },
+            auxiliary: auxEnabled
+              ? { coin: auxCoin, difficulty: _this.stats.networkDifficultyAuxiliary || null, hashrate: _this.stats.networkHashrateAuxiliary || null }
+              : null,
+          },
           shares: { valid: _this.stats.sharesValid, invalid: _this.stats.sharesInvalid, perMinute: parseFloat(_this.getSharesPerMinute()) },
           blocks: { found: _this.stats.blocksFound, confirmed: _this.stats.blocksConfirmed },
           lastShare: _this.stats.lastShareTime ? new Date(_this.stats.lastShareTime).toISOString() : null,
-          lastBlock: _this.stats.lastBlockTime ? { time: new Date(_this.stats.lastBlockTime).toISOString(), height: _this.stats.lastBlockHeight } : null,
+          lastBlock: _this.stats.lastBlockTime ? { coin: priCoin, time: new Date(_this.stats.lastBlockTime).toISOString(), height: _this.stats.lastBlockHeight } : null,
           recentBlocks: _this.stats.recentBlocks || [],
           workers: _this.stats.workers,
         };
@@ -313,6 +335,18 @@ const Stratum = function (logger, config, configMain) {
   // Handle stats event from a worker fork (called on master).
   // Updates local stats AND publishes to Redis live feed from a single connection.
   this.handleStatsEvent = function(event) {
+    if (event.type === 'network') {
+      if (event.chain === 'primary') {
+        _this.stats.currentHeight = event.height;
+        _this.stats.networkDifficulty = event.difficulty;
+        _this.stats.networkHashrate = event.hashrate;
+      } else if (event.chain === 'auxiliary') {
+        _this.stats.currentHeightAuxiliary = event.height;
+        _this.stats.networkDifficultyAuxiliary = event.difficulty;
+        _this.stats.networkHashrateAuxiliary = event.hashrate;
+      }
+      return;
+    }
     if (event.type === 'share') {
       _this.stats.lastShareTime = Date.now();
       if (event.valid) {
